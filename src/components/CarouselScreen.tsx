@@ -219,7 +219,8 @@ function MobileHeader() {
 // ---------------------------------------------------------------- 모든 슬라이드에 공통으로 적용되는 디자인 설정
 
 type Device = 'desktop' | 'mobile';
-type Selected = 'section' | 'title' | 'description' | 'buttons';
+// none: 아무것도 선택 안 됨(패널 없음)
+type Selected = 'none' | 'section' | 'title' | 'description' | 'buttons';
 
 // 캔버스는 실제 화면을 줄여서 보여줌 → 캔버스 1px이 실제 몇 px인지 (데스크탑 1920px, 모바일 393px 기준)
 const REAL_PER_CANVAS: Record<Device, number> = { desktop: 1920 / 920, mobile: 393 / 188 };
@@ -365,6 +366,7 @@ function SpacingHandle({
   value,
   factor,
   onChange,
+  onStart,
   className,
   style,
 }: {
@@ -372,6 +374,7 @@ function SpacingHandle({
   value: number;
   factor: number;
   onChange: (value: number) => void;
+  onStart?: () => void;
   className: string;
   style?: CSSProperties;
 }) {
@@ -390,6 +393,7 @@ function SpacingHandle({
     const scale = element.getBoundingClientRect().width / element.offsetWidth || 1;
     start.current = { x: event.clientX, y: event.clientY, value, scale };
     setIsDragging(true);
+    onStart?.();
   };
 
   const handleMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -445,7 +449,7 @@ function Outline({ color, isSelected }: { color: string; isSelected: boolean }) 
 }
 
 // 캔버스 텍스트: 선택된 텍스트를 한 번 더 클릭하면 그 자리에 커서가 놓이고 바로 편집
-// 제목: Enter 또는 바깥 클릭으로 저장 / 설명: Enter는 줄바꿈, 바깥 클릭으로 저장 / Esc: 취소
+// 제목·설명 모두: Enter는 줄바꿈, 바깥 클릭으로 저장 / Esc: 취소
 type TextKind = 'title' | 'description';
 type EditingText = { kind: TextKind; device: Device } | null;
 
@@ -546,12 +550,13 @@ type SlideViewProps = {
   selected: Selected;
   onSelect: (selected: Selected) => void;
   onSpacingChange: (device: Device, patch: Partial<Spacing>) => void;
+  onSpacingStart: () => void;
   editing: EditingText;
   onTextClick: (kind: TextKind, device: Device) => void;
   onTextDone: (kind: TextKind, value: string | null) => void;
 };
 
-function SlideView({ slide, index, count, device, design, selected, onSelect, onSpacingChange, editing, onTextClick, onTextDone }: SlideViewProps) {
+function SlideView({ slide, index, count, device, design, selected, onSelect, onSpacingChange, onSpacingStart, editing, onTextClick, onTextDone }: SlideViewProps) {
   const metrics = METRICS[device];
   const isDesktop = device === 'desktop';
   const colors = schemeColors(slide.scheme);
@@ -580,6 +585,7 @@ function SlideView({ slide, index, count, device, design, selected, onSelect, on
     <div className="relative w-full shrink-0" style={{ height: toCanvas(spacing[key]) }}>
       {showSectionHandles && (
         <SpacingHandle
+          onStart={onSpacingStart}
           value={spacing[key]}
           factor={factor}
           onChange={(value) => setSpacing({ [key]: value })}
@@ -594,7 +600,10 @@ function SlideView({ slide, index, count, device, design, selected, onSelect, on
     <div
       className="absolute inset-0 flex flex-col items-center overflow-hidden"
       style={{ padding: `${metrics.padTop}px ${metrics.padX}px ${toCanvas(spacing.bottom)}px` }}
-      onClick={() => onSelect('section')}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect('section');
+      }}
     >
       {/* 배경: 이미지가 없으면 회색 */}
       <div className="absolute inset-0 overflow-hidden bg-white">
@@ -618,7 +627,7 @@ function SlideView({ slide, index, count, device, design, selected, onSelect, on
               <EditableText
                 text={slide.title}
                 isEditing={editing?.kind === 'title' && editing.device === device}
-                multiline={false}
+                multiline
                 className={textClass(titleStyle.heading)}
                 style={{ ...DM_SANS, fontSize: titleStyle[device], color: design.titleColor ?? colors.strong }}
                 outline={<Outline color={metrics.outline} isSelected={selected === 'title'} />}
@@ -716,6 +725,7 @@ function SlideView({ slide, index, count, device, design, selected, onSelect, on
       {/* 섹션 아래 여백 핸들: 시안처럼 버튼 바로 아래 12px 영역 */}
       {showSectionHandles && (
         <SpacingHandle
+          onStart={onSpacingStart}
           value={spacing.bottom}
           factor={factor}
           onChange={(value) => setSpacing({ bottom: value })}
@@ -743,7 +753,8 @@ type CanvasProps = Omit<SlideViewProps, 'device'>;
 function Canvas(props: CanvasProps) {
   const isSection = props.selected === 'section';
   return (
-    <div className="absolute top-[55px] left-0 h-[839px] w-[1512px]">
+    // 슬라이드 밖(회색 배경, 헤더, 기기 이름 바 등)을 누르면 선택 해제 → 패널 숨김
+    <div className="absolute top-[55px] left-0 h-[839px] w-[1512px]" onClick={() => props.onSelect('none')}>
       <div className="absolute top-[40px] left-[40px] flex h-[799px] w-[920px] flex-col gap-[12px]">
         <ViewportBar icon={iconDesktop} label="데스크탑" />
         <div className="relative min-h-px w-full flex-1 overflow-hidden bg-white">
@@ -1566,8 +1577,19 @@ export function CarouselScreen() {
         count={slides.length}
         design={design}
         selected={selected}
-        onSelect={setSelected}
+        onSelect={(next) => {
+          // 편집 중에 다른 곳을 누르면 먼저 편집을 끝내서(저장) 고친 글자가 데스크탑·모바일에 반영되게 함
+          if (editing && document.activeElement instanceof HTMLElement) document.activeElement.blur();
+          setSelected(next);
+          // 선택을 해제하면 다음에 슬라이드를 다시 눌렀을 때 '슬라이드' 목록 패널부터 보여줌
+          if (next === 'none') setPanel('list');
+        }}
         onSpacingChange={updateSpacing}
+        onSpacingStart={() => {
+          // 간격을 조절하면 그 슬라이드의 패널(슬라이드 N)을 띄움
+          setSelected('section');
+          setPanel('detail');
+        }}
         editing={editing}
         onTextClick={handleTextClick}
         onTextDone={handleTextDone}
