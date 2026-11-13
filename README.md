@@ -27,8 +27,19 @@ npm run dev
 - 텍스트 일부 드래그: 드래그한 범위에만 별도 색상
 - 캔버스: 휠로 이동, Ctrl(⌘)+휠·핀치로 확대·축소, 왼쪽 아래 확대/축소 버튼
 
+## Carousel 슬라이드 편집 데모
+
+주소: `#/carousel`
+
+- 슬라이드 목록: 슬라이드 클릭 → 상세 패널 + 캔버스가 그 슬라이드로 전환 (패널을 닫아도 그 슬라이드 유지)
+- 목록 줄에 마우스를 올리면 순서 변경 손잡이 표시, 드래그로 순서 변경
+- 슬라이드 상세: 배경 / 색상 / 구성 요소(이번 범위 밖), 휴지통으로 슬라이드 삭제
+- 배경 패널: 이미지·동영상 탭, 이미지 변경(내 파일 선택)·삭제, 오버레이 슬라이더, 링크 입력
+- 색상 패널: 밝은 색상 / 어두운 색상 선택 → 캔버스 글자·버튼 색 반영
+
 ## 구조
 
-- `src/components/TextColorScreen.tsx` — 데모 화면 전체
+- `src/components/TextColorScreen.tsx` — 텍스트 색상 데모 화면 전체
+- `src/components/CarouselScreen.tsx` — Carousel 슬라이드 편집 데모 화면 전체
 - `src/components/Snackbar.tsx` — 토스트
-- `src/assets/figma/text-color/` — Figma 에셋
+- `src/assets/figma/text-color/`, `src/assets/figma/carousel/` — Figma 에셋
