@@ -27,6 +27,7 @@ import iconFocalPoint from '../assets/figma/carousel/focal-point.svg';
 import iconDelete from '../assets/figma/carousel/delete.svg';
 import iconAi from '../assets/figma/carousel/ai.svg';
 import iconSwitchOn from '../assets/figma/carousel/switch-on.svg';
+import iconPlusFilled from '../assets/figma/carousel/plus-filled.svg';
 import iconDirectionRow from '../assets/figma/carousel/direction-row.svg';
 import iconDirectionColumn from '../assets/figma/carousel/direction-column.svg';
 import iconChevronDownPanel from '../assets/figma/text-color/chevron-down-panel.svg';
@@ -80,7 +81,7 @@ type SlideContent = Pick<Slide, 'title' | 'description' | 'image' | 'mobileImage
 
 function makeSlide(id: number, content: SlideContent): Slide {
   const buttons = content.buttons.map((label) => ({ label, link: '' }));
-  return { id, ...content, buttons, fileName: 'fileName.png', mediaType: 'image', overlay: 20, scheme: 'light', link: '' };
+  return { id, ...content, buttons, fileName: 'fileName.png', mediaType: 'image', overlay: 0, scheme: 'light', link: '' };
 }
 
 // 시코몰(cicomall.com) 상품을 참고한 슬라이드 문구와 받은 상품 이미지
@@ -98,6 +99,11 @@ const SLIDE_CONTENTS: SlideContent[] = [
 ];
 
 const INITIAL_SLIDES: Slide[] = SLIDE_CONTENTS.map((content, index) => makeSlide(index + 1, content));
+
+// 새 슬라이드: 배경 없음(회색) + 밝은 색상 + 고칠 수 있는 기본 문구 + 기본 버튼 'Button' (기획서 '슬라이드 추가' 기준)
+function makeEmptySlide(id: number): Slide {
+  return makeSlide(id, { title: '슬라이드 제목', description: '설명을 입력해 주세요', buttons: ['Button'], image: null });
+}
 
 // 한글은 DM Sans에 없으므로 Pretendard로 표시
 const SITE_FONT = "font-['DM_Sans',_'Pretendard']";
@@ -249,6 +255,10 @@ const TEXT_COLORS: { name: string; value: string | null }[] = [
   { name: '포인트 블루', value: '#2e97ff' },
 ];
 
+// 레이아웃: 글 묶음의 위치 (피그마 panel/layout 옵션 순서)
+type LayoutId = 'bottom-center' | 'center' | 'bottom-left';
+const LAYOUT_OPTIONS: LayoutId[] = ['bottom-center', 'center', 'bottom-left'];
+
 type ButtonStyle = '강조 버튼' | '보조 버튼';
 type ButtonSize = '작게' | '보통' | '크게';
 type Direction = 'row' | 'column';
@@ -263,6 +273,7 @@ type Design = {
   buttonSize: Record<Device, ButtonSize>;
   buttonDirection: Record<Device, Direction>;
   buttonFill: boolean; // 가로 영역 채우기: 모바일에만 있는 설정
+  layout: Record<Device, LayoutId>; // 공통 설정 > 레이아웃 (모든 슬라이드 공통)
   spacing: Record<Device, Spacing>;
 };
 
@@ -276,6 +287,7 @@ const INITIAL_DESIGN: Design = {
   buttonSize: { desktop: '보통', mobile: '보통' },
   buttonDirection: { desktop: 'row', mobile: 'row' },
   buttonFill: false,
+  layout: { desktop: 'bottom-center', mobile: 'bottom-center' },
   spacing: {
     desktop: { titleDesc: 12, textButtons: 36, buttonGap: 8, bottom: 64 },
     mobile: { titleDesc: 12, textButtons: 32, buttonGap: 8, bottom: 64 },
@@ -577,6 +589,8 @@ function SlideView({ slide, index, count, device, design, selected, onSelect, on
   const handleSize = (real: number) => Math.max(toCanvas(real), 8);
   const buttonScale = BUTTON_SCALE[design.buttonSize[device]];
   const isFill = !isDesktop && design.buttonFill;
+  const layout = design.layout[device];
+  const isLeft = layout === 'bottom-left';
   const direction = design.buttonDirection[device];
   const isRow = direction === 'row';
 
@@ -620,8 +634,8 @@ function SlideView({ slide, index, count, device, design, selected, onSelect, on
       </div>
       <div className="absolute inset-0 bg-black" style={{ opacity: slide.overlay / 100 }} />
 
-      <div className="relative flex min-h-px w-full flex-1 flex-col items-center justify-end">
-        <div className="flex w-full flex-col items-center text-center break-words break-keep">
+      <div className={`relative flex min-h-px w-full flex-1 flex-col ${isLeft ? 'items-start' : 'items-center'} ${layout === 'center' ? 'justify-center' : 'justify-end'}`}>
+        <div className={`flex w-full flex-col break-words break-keep ${isLeft ? 'items-start text-left' : 'items-center text-center'}`}>
           {slide.title && (
             <p className="w-full">
               <EditableText
@@ -657,7 +671,7 @@ function SlideView({ slide, index, count, device, design, selected, onSelect, on
 
         {slide.buttons.length > 0 && (
           <div
-            className={`group relative flex cursor-default ${isRow ? 'flex-row items-start' : 'flex-col items-center'} ${isFill ? 'w-full items-stretch' : ''}`}
+            className={`group relative flex cursor-default ${isRow ? 'flex-row items-start' : `flex-col ${isLeft ? 'items-start' : 'items-center'}`} ${isFill ? 'w-full items-stretch' : ''}`}
             onClick={(event) => {
               event.stopPropagation();
               onSelect('buttons');
@@ -823,9 +837,11 @@ type ListPanelProps = {
   slides: Slide[];
   onOpen: (index: number) => void;
   onReorder: (from: number, to: number) => void;
+  onOpenLayout: () => void;
+  onAdd: () => void;
 };
 
-function SlideListPanel({ slides, onOpen, onReorder }: ListPanelProps) {
+function SlideListPanel({ slides, onOpen, onReorder, onOpenLayout, onAdd }: ListPanelProps) {
   const dragFrom = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
 
@@ -909,6 +925,15 @@ function SlideListPanel({ slides, onOpen, onReorder }: ListPanelProps) {
               />
             </div>
           ))}
+          {/* 최대 개수보다 적을 때만 목록 맨 아래에 추가 버튼 */}
+          {slides.length < MAX_SLIDES && (
+            <div className="flex w-full shrink-0 items-baseline px-[20px] py-[12px]">
+              <button type="button" onClick={onAdd} className="flex cursor-pointer items-center justify-center gap-[4px] hover:opacity-80">
+                <img src={iconPlusFilled} alt="" width={16} height={16} />
+                <span className="font-['Pretendard'] text-[12px] leading-[18px] font-medium whitespace-nowrap text-[#1a66ff]">슬라이드 추가</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -918,9 +943,85 @@ function SlideListPanel({ slides, onOpen, onReorder }: ListPanelProps) {
           <p className="font-['Pretendard'] text-[11px] leading-[14px] font-normal text-[#667080]">모든 슬라이드에 동일하게 적용돼요</p>
         </div>
         <div className="flex flex-col items-center gap-[8px] px-[16px] pb-[16px]">
-          <MenuItem icon={iconLayout} label="레이아웃" />
+          <MenuItem icon={iconLayout} label="레이아웃" onClick={onOpenLayout} />
           <MenuItem icon={iconError} iconSize={14.222} label="애니메이션" />
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- 1-1. 레이아웃 패널 (공통 설정)
+
+// 레이아웃 옵션 미리보기 (피그마 panel/layout/option 의 축소 화면 그대로)
+function LayoutPreview({ layout }: { layout: LayoutId }) {
+  const isLeft = layout === 'bottom-left';
+  return (
+    <div className="relative flex h-[132.75px] w-[236px] flex-col items-center justify-center overflow-hidden px-[4.425px] py-[7.867px]">
+      <div className="absolute inset-0 bg-[#ddd]" />
+      <div className="absolute inset-0 bg-[rgba(0,0,0,0.2)]" />
+      <div
+        className={`relative flex min-h-px w-full flex-1 flex-col gap-[4.425px] overflow-hidden ${isLeft ? 'items-start' : 'items-center'} ${
+          layout === 'center' ? 'justify-center' : 'justify-end'
+        }`}
+      >
+        <div className={`flex w-full flex-col gap-[1.475px] font-['DM_Sans'] ${isLeft ? 'items-start text-left' : 'items-center text-center'}`} style={DM_SANS}>
+          <p className="w-full text-[1.721px] leading-[1.6] font-normal text-[rgba(255,255,255,0.8)]">Lorem ipsum</p>
+          <p className="w-full text-[6.392px] leading-[1.3] font-medium text-white">Lorem ipsum dolor sit amet</p>
+          <p className="w-full text-[1.967px] leading-[1.5] font-normal text-[rgba(255,255,255,0.8)]">
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Graecis praetorem, consuetudinum, maiores, tribus saluti reprehensa.
+          </p>
+        </div>
+        <div className="flex items-start gap-[0.983px] font-['DM_Sans'] text-[1.598px] leading-[1.2] font-medium whitespace-nowrap" style={DM_SANS}>
+          <span className="rounded-[0.492px] border-[0.123px] border-solid border-transparent bg-white px-[3.319px] py-[1.721px] text-[#111]">Button Label</span>
+          <span className="rounded-[0.492px] border-[0.123px] border-solid border-white px-[3.196px] py-[1.598px] text-white">Button Label</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LayoutPanel({ design, onDesign, onBack }: { design: Design; onDesign: (patch: Partial<Design>) => void; onBack: () => void }) {
+  const [device, setDevice] = useState<Device>('desktop');
+  return (
+    <div className={PANEL_CLASS}>
+      <PanelHeader title="레이아웃" onBack={onBack} />
+      <div className="flex h-[34px] w-[280px] items-start gap-[16px] border-b border-solid border-[rgba(51,62,76,0.1)] px-[20px]">
+        {(['desktop', 'mobile'] as const).map((value) => {
+          const isActive = device === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setDevice(value)}
+              className={`flex h-[34px] min-w-px flex-1 cursor-pointer items-center justify-center font-['Pretendard'] text-[12px] leading-[18px] ${
+                isActive ? 'border-b-2 border-solid border-black font-medium text-black' : 'font-normal text-[#667080]'
+              }`}
+            >
+              {value === 'desktop' ? '데스크탑' : '모바일'}
+            </button>
+          );
+        })}
+      </div>
+      {/* 고른 레이아웃은 모든 슬라이드에 동일하게 적용 */}
+      <div className="flex w-full flex-col gap-[12px] p-[20px]">
+        {LAYOUT_OPTIONS.map((option) => {
+          const isSelected = design.layout[device] === option;
+          return (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onDesign({ layout: { ...design.layout, [device]: option } })}
+              className={`flex w-[240px] cursor-pointer flex-col rounded-[6px] p-[2px] ${
+                isSelected ? 'border-[1.5px] border-solid border-[#1a66ff]' : 'border-[1.5px] border-solid border-transparent'
+              }`}
+            >
+              <span className="flex w-full overflow-hidden rounded-[6px] border border-solid border-[rgba(51,62,76,0.16)] bg-white p-px">
+                <LayoutPreview layout={option} />
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -1507,7 +1608,7 @@ function ButtonPanel({
 
 // ---------------------------------------------------------------- 화면
 
-type PanelView = 'list' | 'detail' | 'background' | 'color';
+type PanelView = 'list' | 'detail' | 'background' | 'color' | 'layout';
 
 // [Carousel 슬라이드 편집] 데모 화면
 export function CarouselScreen() {
@@ -1545,6 +1646,16 @@ export function CarouselScreen() {
       if (from > current && to <= current) return current + 1;
       return current;
     });
+  };
+
+  const addSlide = () => {
+    if (slides.length >= MAX_SLIDES) return;
+    const nextId = Math.max(0, ...slides.map((slide) => slide.id)) + 1;
+    setSlides((prev) => [...prev, makeEmptySlide(nextId)]);
+    // 새 슬라이드로 캔버스를 옮기고 그 슬라이드 패널을 보여줌
+    setActiveIndex(slides.length);
+    setSelected('section');
+    setPanel('detail');
   };
 
   const deleteActive = () => {
@@ -1602,6 +1713,8 @@ export function CarouselScreen() {
             <SlideListPanel
               slides={slides}
               onReorder={reorder}
+              onOpenLayout={() => setPanel('layout')}
+              onAdd={addSlide}
               onOpen={(index) => {
                 setActiveIndex(index);
                 setPanel('detail');
@@ -1613,6 +1726,7 @@ export function CarouselScreen() {
           )}
           {panel === 'background' && <BackgroundPanel slide={activeSlide} onBack={() => setPanel('detail')} onChange={updateActive} />}
           {panel === 'color' && <ColorPanel slide={activeSlide} onBack={() => setPanel('detail')} onChange={updateActive} />}
+          {panel === 'layout' && <LayoutPanel design={design} onDesign={updateDesign} onBack={() => setPanel('list')} />}
         </>
       )}
       {(selected === 'title' || selected === 'description') && (
