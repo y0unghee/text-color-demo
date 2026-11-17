@@ -6,9 +6,11 @@ import {
 } from './components/TextColorScreen';
 import { CarouselScreen, CAROUSEL_SCREEN_WIDTH, CAROUSEL_SCREEN_HEIGHT } from './components/CarouselScreen';
 import { CarouselScreenV2 } from './components/CarouselScreenV2';
+import { CarouselScreenV3 } from './components/CarouselScreenV3';
 
-// Carousel: 모드 1 = 기존 시안(그대로 보존), 모드 2 = 피드백 반영 새 시안
+// Carousel: 모드 1 = 기존 시안(그대로 보존), 모드 2 = 피드백 반영 새 시안, 모드 3 = 모드 2 피드백 반영 시안
 function CarouselDemo({ mode }: { mode: number }) {
+  if (mode === 3) return <CarouselScreenV3 />;
   return mode === 2 ? <CarouselScreenV2 /> : <CarouselScreen />;
 }
 
@@ -18,7 +20,7 @@ type ScreenConfig = { Screen: ComponentType<{ mode: number }>; width: number; he
 // 주소 해시(#/...)별 화면. 해시가 없거나 모르는 값이면 첫 번째 화면을 보여줌
 const SCREENS: Record<string, ScreenConfig> = {
   'text-color': { Screen: TextColorScreen, width: TEXT_COLOR_SCREEN_WIDTH, height: TEXT_COLOR_SCREEN_HEIGHT, modes: 2 },
-  carousel: { Screen: CarouselDemo, width: CAROUSEL_SCREEN_WIDTH, height: CAROUSEL_SCREEN_HEIGHT, modes: 2 },
+  carousel: { Screen: CarouselDemo, width: CAROUSEL_SCREEN_WIDTH, height: CAROUSEL_SCREEN_HEIGHT, modes: 3 },
 };
 const DEFAULT_SCREEN = 'text-color';
 
