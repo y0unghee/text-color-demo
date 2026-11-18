@@ -27,7 +27,6 @@ import iconAi from '../assets/figma/carousel/ai.svg';
 import iconSwitchOn from '../assets/figma/carousel/switch-on.svg';
 import iconChevronLeftWhite from '../assets/figma/carousel/chevron-left-white.svg';
 import iconChevronRightWhite from '../assets/figma/carousel/chevron-right-white.svg';
-import iconChevronRightSmall from '../assets/figma/carousel/chevron-right-small.svg';
 import iconLayout from '../assets/figma/carousel/layout.svg';
 import iconPlusFilled from '../assets/figma/carousel/plus-filled.svg';
 import iconInformation from '../assets/figma/carousel/information.svg';
@@ -594,7 +593,6 @@ function SpacingHandle({
   factor,
   onChange,
   onStart,
-  onEnd,
   className,
   style,
 }: {
@@ -603,7 +601,6 @@ function SpacingHandle({
   factor: number;
   onChange: (value: number) => void;
   onStart?: () => void;
-  onEnd?: () => void; // 드래그를 끝냈을 때 (간격 일괄 반영 안내용)
   className: string;
   style?: CSSProperties;
 }) {
@@ -641,10 +638,8 @@ function SpacingHandle({
   };
 
   const handleUp = () => {
-    const wasDragging = start.current !== null;
     start.current = null;
     setIsDragging(false);
-    if (wasDragging) onEnd?.();
   };
 
   return (
@@ -795,26 +790,12 @@ type SlideViewProps = {
   onSelect: (selected: Selected) => void;
   onSpacingChange: (device: Device, patch: Partial<Spacing>) => void;
   onSpacingStart: () => void;
-  onSpacingEnd: () => void; // 간격 드래그를 끝냈을 때
   editing: EditingText;
   onTextClick: (kind: TextKind, device: Device) => void;
   onTextDone: (kind: TextKind, value: string | null) => void;
 };
 
-function SlideView({
-  slide,
-  index,
-  count,
-  device,
-  selected,
-  onSelect,
-  onSpacingChange,
-  onSpacingStart,
-  onSpacingEnd,
-  editing,
-  onTextClick,
-  onTextDone,
-}: SlideViewProps) {
+function SlideView({ slide, index, count, device, selected, onSelect, onSpacingChange, onSpacingStart, editing, onTextClick, onTextDone }: SlideViewProps) {
   const metrics = METRICS[device];
   const isDesktop = device === 'desktop';
   const colors = schemeColors(slide.scheme);
@@ -852,7 +833,6 @@ function SlideView({
       {showSectionHandles && (
         <SpacingHandle
           onStart={onSpacingStart}
-          onEnd={onSpacingEnd}
           value={spacing[key]}
           factor={factor}
           onChange={(value) => setSpacing({ [key]: value })}
@@ -984,7 +964,6 @@ function SlideView({
                           value={spacing.buttonGap}
                           factor={factor}
                           onChange={(value) => setSpacing({ buttonGap: value })}
-                          onEnd={onSpacingEnd}
                           className={isRow ? 'top-0 bottom-0 left-1/2 -translate-x-1/2' : 'top-1/2 right-0 left-0 -translate-y-1/2'}
                           style={isRow ? { width: handleSize(spacing.buttonGap) } : { height: handleSize(spacing.buttonGap) }}
                         />
@@ -1043,7 +1022,6 @@ function SlideView({
       {showSectionHandles && layout !== 'center' && (
         <SpacingHandle
           onStart={onSpacingStart}
-          onEnd={onSpacingEnd}
           value={spacing.bottom}
           factor={factor}
           onChange={(value) => setSpacing({ bottom: value })}
@@ -2401,61 +2379,6 @@ function TextStyleSelect({ value, onChange }: { value: TextStyleId; onChange: (i
   );
 }
 
-// 변경 안내 카드 안 'Ag 스타일명' = 스타일 메뉴 글자 크기의 약 0.526배 (피그마: 제목 1 24 → 12.632)
-const STYLE_PREVIEW_RATIO = 12.632 / 24;
-
-// 변경 안내 카드: 'Ag 스타일명'을 그 스타일 크기 + 그 글자색으로
-function ChangePreviewCard({ style, label, name, color }: { style: TextStyleId; label: string; name: string; color?: string }) {
-  const config = TEXT_STYLES.find((item) => item.id === style);
-  const size = (config?.menu ?? 12) * STYLE_PREVIEW_RATIO;
-  return (
-    <div className="flex min-w-px flex-1 flex-col items-center gap-[8px]">
-      <div className="flex h-[32px] w-full items-center justify-center overflow-hidden rounded-[6px]">
-        <span
-          className={`flex items-center gap-[4.211px] leading-none tracking-[-0.0351px] whitespace-nowrap ${config?.heading ? 'font-bold' : 'font-medium'}`}
-          style={{ fontSize: size, color: color ?? 'black' }}
-        >
-          <span className="font-['DM_Sans']" style={DM_SANS}>
-            Ag
-          </span>
-          <span className="font-['Pretendard']">{name}</span>
-        </span>
-      </div>
-      <p className={NOTICE_LABEL_CLASS}>{label}</p>
-    </div>
-  );
-}
-
-type ChangePreview = { key: string; before: { style: TextStyleId; name: string; color?: string }; after: { style: TextStyleId; name: string; color?: string } };
-
-// 시안 3: 텍스트 변경 안내 (피그마 panel/text 하단). 변경 전 › 변경 후 (스타일·색상 함께) + 모든 슬라이드에 반영
-// 텍스트·버튼 변경 안내 공용 스타일
-const NOTICE_WRAP_CLASS =
-  'flex w-full shrink-0 flex-col items-center gap-[12px] rounded-b-[12px] border-t border-solid border-[rgba(51,62,76,0.1)] bg-white px-[16px] pt-[17px] pb-[16px] shadow-[0px_4px_16px_0px_rgba(65,78,97,0.2),0px_4px_16px_0px_rgba(65,78,97,0.08)]';
-const NOTICE_BOX_CLASS = 'flex w-[248px] items-center gap-[8px] overflow-hidden rounded-[8px] bg-[rgba(0,0,0,0.25)] px-[16px]';
-const NOTICE_LABEL_CLASS = "font-['Pretendard'] text-[11px] leading-[14px] font-normal whitespace-nowrap text-[rgba(255,255,255,0.8)]";
-const NOTICE_APPLY_CLASS =
-  "flex h-[34px] w-full cursor-pointer items-center justify-center rounded-[8px] bg-[#181d25] px-[16px] py-[8px] font-['Pretendard'] text-[12px] leading-[18px] font-medium whitespace-nowrap text-white hover:bg-[#2f343b]";
-
-function TextChangeNotice({ changes, onApply }: { changes: ChangePreview[]; onApply: () => void }) {
-  return (
-    <div className={NOTICE_WRAP_CLASS}>
-      {changes.map((change) => (
-        <div key={change.key} className={`h-[78px] ${NOTICE_BOX_CLASS}`}>
-          <ChangePreviewCard {...change.before} label="변경 전" />
-          <div className="flex h-full flex-col justify-center pb-[26px]">
-            <img src={iconChevronRightSmall} alt="→" width={16} height={16} />
-          </div>
-          <ChangePreviewCard {...change.after} label="변경 후" />
-        </div>
-      ))}
-      <button type="button" onClick={onApply} className={NOTICE_APPLY_CLASS}>
-        모든 슬라이드에 반영
-      </button>
-    </div>
-  );
-}
-
 function TextPanel({
   kind,
   slide,
@@ -2463,7 +2386,6 @@ function TextPanel({
   defaultColor,
   onDesign,
   onSlide,
-  onApplyAll,
   onOpenSlideColor,
 }: {
   kind: TextKind;
@@ -2473,32 +2395,15 @@ function TextPanel({
   defaultColor: string;
   onDesign: (patch: Partial<Design>) => void;
   onSlide: (patch: Partial<Slide>) => void;
-  onApplyAll: (patch: Partial<Slide>) => void;
 }) {
   const styleKey = TEXT_FIELDS[kind].style;
-  // 시안 2: 스타일은 슬라이드별. 패널을 열었을 때(또는 마지막으로 모두 반영했을 때) 값 = before
-  const [beforeStyle, setBeforeStyle] = useState(slide[styleKey]);
   const afterStyle = slide[styleKey];
   const colorKey = TEXT_FIELDS[kind].color;
-  // 시안 3: 색상도 슬라이드별 + 바뀌면 변경 안내
-  const [beforeColor, setBeforeColor] = useState(slide[colorKey]);
+  // 시안 3: 색상도 슬라이드별
   const colorValue = slide[colorKey];
   // 공통 스타일 이름 = 컬러 슬롯명 (색상 칸·툴팁 공용)
   const commonName = `텍스트 - ${TEXT_FIELDS[kind].name}`;
   const [isColorMenuOpen, setColorMenuOpen] = useState(false);
-
-  // 변경 안내: 카드 한 쌍에 스타일(크기)과 색상(글자색)을 함께 보여 줌
-  const colorCss = (color: TextColor | null) => (color ? textColorCss(color) : defaultColor);
-  const changes: ChangePreview[] =
-    beforeStyle !== afterStyle || !sameColor(beforeColor, colorValue)
-      ? [
-          {
-            key: 'text',
-            before: { style: beforeStyle, name: beforeStyle, color: colorCss(beforeColor) },
-            after: { style: afterStyle, name: afterStyle, color: colorCss(colorValue) },
-          },
-        ]
-      : [];
 
   return (
     <div className={ELEMENT_PANEL_CLASS}>
@@ -2525,8 +2430,13 @@ function TextPanel({
         </button>
       </div>
 
-      {/* 시안 2: 색상 → 스타일 순서 */}
+      {/* 스타일 → 색상 순서 */}
       <div className={SECTION_CLASS}>
+        <p className={SECTION_TITLE_CLASS}>스타일</p>
+        <TextStyleSelect value={afterStyle} onChange={(id) => onSlide({ [styleKey]: id })} />
+      </div>
+
+      <div className="flex w-full flex-col gap-[12px] p-[20px]">
         <p className={SECTION_TITLE_CLASS}>색상</p>
         <div className="relative w-full">
           {/* 공통 스타일이면 슬롯명, 색을 골랐으면 HEX + 불투명도 */}
@@ -2571,22 +2481,6 @@ function TextPanel({
           )}
         </div>
       </div>
-
-      <div className="flex w-full flex-col gap-[12px] p-[20px]">
-        <p className={SECTION_TITLE_CLASS}>스타일</p>
-        <TextStyleSelect value={afterStyle} onChange={(id) => onSlide({ [styleKey]: id })} />
-      </div>
-
-      {changes.length > 0 && (
-        <TextChangeNotice
-          changes={changes}
-          onApply={() => {
-            onApplyAll({ [styleKey]: afterStyle, [colorKey]: colorValue });
-            setBeforeStyle(afterStyle);
-            setBeforeColor(colorValue);
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -2595,147 +2489,20 @@ function TextPanel({
 
 const BUTTON_LABEL_MAX = 15;
 
-type ButtonSettings = Pick<Slide, 'buttonStyles' | 'buttonSize' | 'buttonDirection' | 'buttonFill'>;
-const DIRECTION_LABEL: Record<Direction, string> = { row: '가로 배치', column: '세로 배치' };
-const DEVICE_LABEL: Record<Device, string> = { desktop: '데스크탑', mobile: '모바일' };
-
-// 버튼 설정에서 바뀐 항목들 (변경 안내 줄 + 다른 슬라이드에 반영할 값)
-function buttonChanges(before: ButtonSettings, after: ButtonSettings, hasSecond: boolean) {
-  const rows: { key: string; label: string; before: string; after: string }[] = [];
-  const apply: ((target: Slide) => Partial<Slide>)[] = [];
-  ([0, 1] as const).forEach((index) => {
-    if (index === 1 && !hasSecond) return;
-    if (before.buttonStyles[index] === after.buttonStyles[index]) return;
-    rows.push({ key: `style-${index}`, label: `버튼 ${index + 1}`, before: before.buttonStyles[index], after: after.buttonStyles[index] });
-    apply.push((target) => {
-      const next: [ButtonStyle, ButtonStyle] = [...target.buttonStyles];
-      next[index] = after.buttonStyles[index];
-      return { buttonStyles: next };
-    });
-  });
-  (['desktop', 'mobile'] as const).forEach((device) => {
-    if (before.buttonSize[device] !== after.buttonSize[device]) {
-      rows.push({ key: `size-${device}`, label: `${DEVICE_LABEL[device]} 크기`, before: before.buttonSize[device], after: after.buttonSize[device] });
-      apply.push((target) => ({ buttonSize: { ...target.buttonSize, [device]: after.buttonSize[device] } }));
-    }
-    if (before.buttonDirection[device] !== after.buttonDirection[device]) {
-      rows.push({
-        key: `direction-${device}`,
-        label: `${DEVICE_LABEL[device]} 배치 방향`,
-        before: DIRECTION_LABEL[before.buttonDirection[device]],
-        after: DIRECTION_LABEL[after.buttonDirection[device]],
-      });
-      apply.push((target) => ({ buttonDirection: { ...target.buttonDirection, [device]: after.buttonDirection[device] } }));
-    }
-  });
-  if (before.buttonFill !== after.buttonFill) {
-    rows.push({ key: 'fill', label: '모바일 가로 영역 채우기', before: before.buttonFill ? '켜짐' : '꺼짐', after: after.buttonFill ? '켜짐' : '꺼짐' });
-    apply.push(() => ({ buttonFill: after.buttonFill }));
-  }
-  // 슬라이드 하나에 바뀐 항목을 모두 적용
-  const applyTo = (target: Slide) => apply.reduce<Slide>((acc, fn) => ({ ...acc, ...fn(acc) }), target);
-  return { rows, applyTo };
-}
-
-// 변경 안내용 버튼 묶음 미니 미리보기 (피그마 panel/button 하단): 스타일·크기·배치 방향·가로 채우기
 // 버튼 1개면 크게(문구 12px), 2개면 작게(문구 6px) 보여 줌
-const PREVIEW_SINGLE: Record<ButtonSize, { width: number; height: number; font: number }> = {
-  작게: { width: 64, height: 26, font: 10 },
-  보통: { width: 80, height: 32, font: 12 },
-  크게: { width: 92, height: 40, font: 12 },
-};
-const PREVIEW_PAIR: Record<ButtonSize, { width: number; height: number; font: number }> = {
-  작게: { width: 40, height: 16, font: 6 },
-  보통: { width: 44, height: 22, font: 6 },
-  크게: { width: 44, height: 26, font: 7 },
-};
-
-function ButtonGroupPreview({ settings, count, device }: { settings: ButtonSettings; count: number; device: Device }) {
-  const size = settings.buttonSize[device];
-  const isColumn = count > 1 && settings.buttonDirection[device] === 'column';
-  const isFill = device === 'mobile' && settings.buttonFill;
-  const base = count > 1 ? PREVIEW_PAIR[size] : PREVIEW_SINGLE[size];
-  // 세로 배치는 높이 40 안에 두 줄이 들어가게 줄이고, 가로는 꽉 채움
-  const height = isColumn ? Math.round(base.height * 0.75) : base.height;
-  const width = isColumn || (isFill && count === 1) ? 92 : isFill ? 44 : base.width;
-  return (
-    <div className={`flex h-[40px] w-full items-center justify-center gap-[4px] ${isColumn ? 'flex-col' : ''}`}>
-      {Array.from({ length: count }, (_, index) => {
-        const isFilled = settings.buttonStyles[index] === '강조 버튼';
-        return (
-          <span
-            key={index}
-            className={`flex shrink-0 items-center justify-center overflow-hidden rounded-[3px] border-solid font-['Pretendard'] leading-none font-medium whitespace-nowrap ${
-              isFilled ? 'border border-[rgba(51,62,76,0.16)] bg-black text-white' : 'border-[0.5px] border-[rgba(51,62,76,0.16)] text-black'
-            }`}
-            style={{ width, height, fontSize: base.font }}
-          >
-            버튼 문구
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-// 시안 3: 버튼 변경 안내. 변경 전 › 변경 후 버튼 묶음 + 모든 슬라이드에 반영 (텍스트 안내와 같은 모양)
-function ButtonChangeNotice({
-  before,
-  after,
-  count,
-  device,
-  onApply,
-}: {
-  before: ButtonSettings;
-  after: ButtonSettings;
-  count: number;
-  device: Device;
-  onApply: () => void;
-}) {
-  const card = (settings: ButtonSettings, label: string) => (
-    <div className="flex min-w-px flex-1 flex-col items-center gap-[8px]">
-      <ButtonGroupPreview settings={settings} count={count} device={device} />
-      <p className={NOTICE_LABEL_CLASS}>{label}</p>
-    </div>
-  );
-  return (
-    <div className={NOTICE_WRAP_CLASS}>
-      <div className={`pt-[20px] pb-[16px] ${NOTICE_BOX_CLASS}`}>
-        {card(before, '변경 전')}
-        <div className="flex flex-col justify-center self-stretch pb-[22px]">
-          <img src={iconChevronRightSmall} alt="→" width={16} height={16} />
-        </div>
-        {card(after, '변경 후')}
-      </div>
-      <button type="button" onClick={onApply} className={NOTICE_APPLY_CLASS}>
-        모든 슬라이드에 반영
-      </button>
-    </div>
-  );
-}
 
 function ButtonPanel({
   slide,
   onSlide,
-  onApplyAll,
   onOpenSlideColor,
 }: {
   slide: Slide;
   onSlide: (patch: Partial<Slide>) => void;
-  onApplyAll: (applyTo: (target: Slide) => Slide) => void;
   onOpenSlideColor: () => void; // 안내의 '색상' → 슬라이드 N > 색상 패널
 }) {
   const [tab, setTab] = useState<'button' | 'layout'>('button');
   // 크기 및 배치 탭에서 설정 중인 기기
   const [layoutDevice, setLayoutDevice] = useState<Device>('desktop');
-  // 패널을 열었을 때(또는 마지막으로 모두 반영했을 때)의 버튼 설정 = before
-  const pick = (target: Slide): ButtonSettings => ({
-    buttonStyles: target.buttonStyles,
-    buttonSize: target.buttonSize,
-    buttonDirection: target.buttonDirection,
-    buttonFill: target.buttonFill,
-  });
-  const [before, setBefore] = useState<ButtonSettings>(() => pick(slide));
 
   const updateButton = (buttonIndex: number, patch: Partial<SlideButton>) => {
     onSlide({
@@ -2748,7 +2515,6 @@ function ButtonPanel({
     onSlide({ buttonStyles: next });
   };
   const hasSecond = slide.buttons.length > 1;
-  const changes = buttonChanges(before, pick(slide), hasSecond);
 
   const buttonFields = (buttonIndex: number) => {
     const button = slide.buttons[buttonIndex];
@@ -2775,7 +2541,7 @@ function ButtonPanel({
   };
 
   return (
-    // 피그마처럼 패널 높이는 최대 799px: 탭 아래 내용만 스크롤되고 변경 안내는 맨 아래 고정
+    // 피그마처럼 패널 높이는 최대 799px: 탭 아래 내용만 스크롤
     <div className={`${ELEMENT_PANEL_CLASS} flex max-h-[799px] flex-col`}>
       <PanelHeader title="버튼" />
 
@@ -2915,46 +2681,6 @@ function ButtonPanel({
           </div>
         )}
       </div>
-      {changes.rows.length > 0 && (
-        <ButtonChangeNotice
-          before={before}
-          after={pick(slide)}
-          count={slide.buttons.length}
-          // 모바일 설정만 바뀌었으면 모바일 기준으로, 아니면 데스크탑 기준으로 보여 줌
-          device={changes.rows.every((row) => row.key.endsWith('mobile') || row.key === 'fill') ? 'mobile' : 'desktop'}
-          onApply={() => {
-            onApplyAll(changes.applyTo);
-            setBefore(pick(slide));
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-// 시안 3: 스낵바 (피그마 snackbar: 편집 화면 위 가운데, 위에서 11px). 버튼이 있으면 간격 일괄 반영 안내, 없으면 알림
-// 공용 Snackbar는 화면 기준(fixed)이라 축소된 편집 화면에서 가운데가 어긋나서, 시안 3은 편집 화면 기준으로 둠
-function ActionSnackbar({ message, actionLabel, visible, onAction }: { message: string; actionLabel?: string; visible: boolean; onAction?: () => void }) {
-  return (
-    <div
-      className={`absolute top-[11px] left-1/2 z-50 -translate-x-1/2 transition-all duration-200 ${
-        visible ? 'translate-y-0 opacity-100' : 'pointer-events-none -translate-y-1 opacity-0'
-      }`}
-    >
-      <div
-        className={`flex min-h-[56px] items-center gap-[8px] rounded-[8px] bg-[#333e4c] px-[16px] shadow-[0px_1px_8px_0px_rgba(65,78,97,0.16),0px_2px_24px_0px_rgba(65,78,97,0.2)] ${actionLabel ? 'py-[6px]' : 'py-[16px]'}`}
-      >
-        <p className="font-['Pretendard'] text-[14px] leading-[20px] font-normal whitespace-nowrap text-white">{message}</p>
-        {actionLabel && (
-          <button
-            type="button"
-            onClick={onAction}
-            className="flex h-[40px] shrink-0 cursor-pointer items-center justify-center rounded-[8px] px-[12px] py-[8px] font-['Pretendard'] text-[14px] leading-[20px] font-semibold whitespace-nowrap text-white hover:bg-[rgba(255,255,255,0.12)]"
-          >
-            {actionLabel}
-          </button>
-        )}
-      </div>
     </div>
   );
 }
@@ -2972,13 +2698,7 @@ export function CarouselScreenV3() {
   // 슬라이드 패널 탭. 상세로 들어갔다 돌아와도 보던 탭 유지
   const [listTab, setListTab] = useState<ListTab>('content');
   // 화면 위 토스트 (예: 레이아웃 모두 반영)
-  const [toast, setToast] = useState({ message: '', visible: false });
-  const toastTimer = useRef<number | undefined>(undefined);
-  const showToast = (message: string) => {
-    setToast({ message, visible: true });
-    window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast((prev) => ({ ...prev, visible: false })), 2000);
-  };
+
   // 캔버스에서 선택한 요소. section이면 슬라이드 패널(목록·상세 등), 그 외엔 요소 패널
   const [selected, setSelected] = useState<Selected>('section');
   // 모든 슬라이드에 공통으로 적용되는 스타일·배치·간격
@@ -2996,57 +2716,13 @@ export function CarouselScreenV3() {
     setSlides((prev) => prev.map((slide, index) => (index === activeIndex ? { ...slide, ...patch } : slide)));
   };
   const updateDesign = (patch: Partial<Design>) => setDesign((prev) => ({ ...prev, ...patch }));
-  // 시안 3: 간격은 지금 보고 있는 슬라이드에만 적용. 드래그를 시작할 때 값 = before (끝나면 비교해서 일괄 반영 안내)
-  const spacingBefore = useRef<Record<Device, Spacing> | null>(null);
+  // 시안 3: 간격은 지금 보고 있는 슬라이드에만 적용
   const updateSpacing = (device: Device, patch: Partial<Spacing>) => {
-    if (!spacingBefore.current) spacingBefore.current = activeSlide.spacing;
     setSlides((prev) =>
       prev.map((slide, index) =>
         index === activeIndex ? { ...slide, spacing: { ...slide.spacing, [device]: { ...slide.spacing[device], ...patch } } } : slide,
       ),
     );
-  };
-
-  // 간격 일괄 반영 스낵바: 이번 드래그로 바뀐 간격만 (기기별)
-  const [spacingOffer, setSpacingOffer] = useState<{ patch: Partial<Record<Device, Partial<Spacing>>>; visible: boolean }>({
-    patch: {},
-    visible: false,
-  });
-  const spacingOfferTimer = useRef<number | undefined>(undefined);
-  const handleSpacingEnd = () => {
-    const before = spacingBefore.current;
-    spacingBefore.current = null;
-    if (!before) return;
-    const patch: Partial<Record<Device, Partial<Spacing>>> = {};
-    (['desktop', 'mobile'] as const).forEach((device) => {
-      (Object.keys(before[device]) as (keyof Spacing)[]).forEach((key) => {
-        const after = activeSlide.spacing[device][key];
-        if (after !== before[device][key]) patch[device] = { ...patch[device], [key]: after };
-      });
-    });
-    if (!patch.desktop && !patch.mobile) return;
-    setSpacingOffer({ patch, visible: true });
-    window.clearTimeout(spacingOfferTimer.current);
-    spacingOfferTimer.current = window.setTimeout(() => setSpacingOffer((prev) => ({ ...prev, visible: false })), 8000);
-  };
-  const applySpacingToAll = () => {
-    const { patch } = spacingOffer;
-    setSlides((prev) =>
-      prev.map((slide) =>
-        slide.id === activeSlide.id
-          ? slide
-          : {
-              ...slide,
-              spacing: {
-                desktop: { ...slide.spacing.desktop, ...patch.desktop },
-                mobile: { ...slide.spacing.mobile, ...patch.mobile },
-              },
-            },
-      ),
-    );
-    window.clearTimeout(spacingOfferTimer.current);
-    setSpacingOffer((prev) => ({ ...prev, visible: false }));
-    showToast(`다른 슬라이드 ${slides.length - 1}개에 반영했어요`);
   };
 
   const reorder = (from: number, to: number) => {
@@ -3137,7 +2813,6 @@ export function CarouselScreenV3() {
           if (next === 'none') setPanel('list');
         }}
         onSpacingChange={updateSpacing}
-        onSpacingEnd={handleSpacingEnd}
         onSpacingStart={() => {
           // 간격을 조절하면 그 슬라이드의 패널(슬라이드 N)을 띄움
           setSelected('section');
@@ -3148,13 +2823,6 @@ export function CarouselScreenV3() {
         onTextDone={handleTextDone}
       />
       <Toolbar />
-      <ActionSnackbar message={toast.message} visible={toast.visible} />
-      <ActionSnackbar
-        message="변경한 간격을 다른 슬라이드에도 일괄 반영할까요?"
-        actionLabel="변경"
-        visible={spacingOffer.visible && !toast.visible}
-        onAction={applySpacingToAll}
-      />
 
       {selected === 'section' && (
         <>
@@ -3226,10 +2894,6 @@ export function CarouselScreenV3() {
           defaultColor={selected === 'title' ? colors.strong : colors.soft}
           onDesign={updateDesign}
           onSlide={updateActive}
-          onApplyAll={(patch) => {
-            setSlides((prev) => prev.map((item) => ({ ...item, ...patch })));
-            showToast(`다른 슬라이드 ${slides.length - 1}개에 반영했어요`);
-          }}
           // 색상 메뉴 안내의 '색상 메뉴' → 지금 슬라이드의 색상 패널 (뒤로 가면 슬라이드 N)
           onOpenSlideColor={() => {
             setSelected('section');
@@ -3242,10 +2906,6 @@ export function CarouselScreenV3() {
           key={activeSlide.id}
           slide={activeSlide}
           onSlide={updateActive}
-          onApplyAll={(applyTo) => {
-            setSlides((prev) => prev.map((item) => (item.id === activeSlide.id ? item : applyTo(item))));
-            showToast(`다른 슬라이드 ${slides.length - 1}개에 반영했어요`);
-          }}
           onOpenSlideColor={() => {
             setSelected('section');
             setPanel('color');

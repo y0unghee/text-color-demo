@@ -12,11 +12,18 @@ import iconArrowLeft from '../assets/figma/carousel/arrow-left.svg';
 import iconArrowRight from '../assets/figma/carousel/arrow-right.svg';
 import iconOverflow from '../assets/figma/carousel/overflow.svg';
 import iconChevronRightEdge from '../assets/figma/carousel/chevron-right-edge.svg';
+import iconInformation from '../assets/figma/carousel/information.svg';
+import iconPlusSmall from '../assets/figma/carousel/plus-small.svg';
+import iconTooltipTip from '../assets/figma/carousel/tooltip-tip.svg';
+import imgOpacityTrack from '../assets/figma/carousel/opacity-track.png';
 import iconChevronRight from '../assets/figma/carousel/chevron-right.svg';
 import iconImageFilled from '../assets/figma/carousel/image-filled.svg';
 import iconReorderDot from '../assets/figma/carousel/reorder-dot.svg';
 import iconLayout from '../assets/figma/carousel/layout.svg';
+import iconChevronLeftWhite from '../assets/figma/carousel/chevron-left-white.svg';
+import iconChevronRightWhite from '../assets/figma/carousel/chevron-right-white.svg';
 import iconError from '../assets/figma/carousel/error.svg';
+import iconSlide from '../assets/figma/carousel/slide.svg';
 import iconBack from '../assets/figma/carousel/back.svg';
 import iconDeleteSlide from '../assets/figma/carousel/delete-slide.svg';
 import iconImage from '../assets/figma/carousel/image.svg';
@@ -235,45 +242,127 @@ const REAL_PER_CANVAS: Record<Device, number> = { desktop: 1920 / 920, mobile: 3
 type Spacing = { titleDesc: number; textButtons: number; buttonGap: number; bottom: number };
 
 // 텍스트 스타일: 캔버스에서의 글자 크기(px)
+// menu: 스타일 선택 메뉴(피그마 menu/textStyle)의 'Ag 스타일명' 글자 크기
+// 시안 3에서 추가한 제목 5·본문 4·캡션 1·2의 캔버스 크기는 앞 단계에 맞춰 이어서 정함
 const TEXT_STYLES = [
-  { id: '제목 1', desktop: 34.5, mobile: 23, heading: true },
-  { id: '제목 2', desktop: 28.75, mobile: 20.5, heading: true },
-  { id: '제목 3', desktop: 24.917, mobile: 18, heading: true },
-  { id: '제목 4', desktop: 19.167, mobile: 14.5, heading: true },
-  { id: '본문 1', desktop: 9.583, mobile: 8.4, heading: false },
-  { id: '본문 2', desktop: 8.625, mobile: 7.7, heading: false },
-  { id: '본문 3', desktop: 7.667, mobile: 7, heading: false },
+  { id: '제목 1', desktop: 34.5, mobile: 23, heading: true, menu: 24 },
+  { id: '제목 2', desktop: 28.75, mobile: 20.5, heading: true, menu: 21.6 },
+  { id: '제목 3', desktop: 24.917, mobile: 18, heading: true, menu: 19.5 },
+  { id: '제목 4', desktop: 19.167, mobile: 14.5, heading: true, menu: 17.6 },
+  { id: '제목 5', desktop: 15.333, mobile: 12.5, heading: true, menu: 16.2 },
+  { id: '본문 1', desktop: 9.583, mobile: 8.4, heading: false, menu: 16.2 },
+  { id: '본문 2', desktop: 8.625, mobile: 7.7, heading: false, menu: 15.1 },
+  { id: '본문 3', desktop: 7.667, mobile: 7, heading: false, menu: 14.4 },
+  { id: '본문 4', desktop: 7.188, mobile: 6.6, heading: false, menu: 13.7 },
+  { id: '캡션 1', desktop: 6.708, mobile: 6.2, heading: false, menu: 12.9 },
+  { id: '캡션 2', desktop: 6.229, mobile: 5.8, heading: false, menu: 12 },
 ] as const;
 type TextStyleId = (typeof TEXT_STYLES)[number]['id'];
 
-// value가 null이면 슬라이드 색상(밝은/어두운) 기본값을 따름
-const TEXT_COLORS: { name: string; value: string | null }[] = [
-  { name: '색상 테마 기본', value: null },
-  { name: '흰색', value: '#ffffff' },
-  { name: '검정', value: '#111111' },
-  { name: '웜 베이지', value: '#e9dcc9' },
-  { name: '포인트 블루', value: '#2e97ff' },
-];
+// 텍스트 색상 메뉴의 '색상 세트' (시안 3과 같음) (피그마 menu/color 순서)
+// 텍스트 색 값이 null이면 '공통 스타일' = 슬라이드 색상(밝은/어두운)의 기본 전경색
+const COLOR_SET = ['#ebe0a3', '#585d61', '#37231f', '#f7f5f1', '#a9afb1'];
+
+// 텍스트 색 (커스텀은 불투명도까지)
+type TextColor = { hex: string; opacity: number };
+
+function textColorCss({ hex, opacity }: TextColor) {
+  if (opacity >= 100) return hex;
+  const value = parseInt(hex.slice(1), 16);
+  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${opacity / 100})`;
+}
+
+function sameColor(a: TextColor | null, b: TextColor | null) {
+  if (!a || !b) return a === b;
+  return a.hex.toLowerCase() === b.hex.toLowerCase() && a.opacity === b.opacity;
+}
+
+type Hsv = { h: number; s: number; v: number };
+
+function hexToHsv(hex: string): Hsv {
+  const value = parseInt(hex.slice(1), 16);
+  const r = ((value >> 16) & 255) / 255;
+  const g = ((value >> 8) & 255) / 255;
+  const b = (value & 255) / 255;
+  const max = Math.max(r, g, b);
+  const d = max - Math.min(r, g, b);
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h = (h * 60 + 360) % 360;
+  }
+  return { h, s: max ? d / max : 0, v: max };
+}
+
+function hsvToHex({ h, s, v }: Hsv) {
+  const f = (n: number) => {
+    const k = (n + h / 60) % 6;
+    return Math.round((v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255);
+  };
+  return `#${[f(5), f(3), f(1)].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
+}
+
 
 // 레이아웃: 글 묶음의 위치 (피그마 panel/layout 옵션 순서)
 type LayoutId = 'bottom-center' | 'center' | 'bottom-left';
 const LAYOUT_OPTIONS: LayoutId[] = ['bottom-center', 'center', 'bottom-left'];
+// 모바일 탭은 피그마 순서대로 왼쪽 아래 → 아래 가운데 → 가운데
+const MOBILE_LAYOUT_OPTIONS: LayoutId[] = ['bottom-left', 'bottom-center', 'center'];
+
+// 레이아웃 비율 선택지 (시안 3과 같음). value = 가로/세로 (null = 풀스크린, 지금 캔버스 크기 그대로)
+const RATIO_OPTIONS: Record<Device, { label: string; value: number | null }[]> = {
+  desktop: [
+    { label: '풀스크린', value: null },
+    { label: '2:1', value: 2 },
+    { label: '21:9', value: 21 / 9 },
+    { label: '3:1', value: 3 },
+    { label: '4:1', value: 4 },
+  ],
+  mobile: [
+    { label: '풀스크린', value: null },
+    { label: '9:16', value: 9 / 16 },
+    { label: '5:8', value: 5 / 8 },
+    { label: '4:5', value: 4 / 5 },
+  ],
+};
+
+// 캔버스 슬라이드 크기 (풀스크린 = 피그마 시안 크기)
+const SLIDE_BOX: Record<Device, { width: number; fullHeight: number }> = {
+  desktop: { width: 920, fullHeight: 517.5 },
+  mobile: { width: 188, fullHeight: 406.851 },
+};
+
+function slideHeight(device: Device, ratio: string) {
+  const value = ratioValue(device, ratio);
+  return value === null ? SLIDE_BOX[device].fullHeight : SLIDE_BOX[device].width / value;
+}
+
 
 type ButtonStyle = '강조 버튼' | '보조 버튼';
 type ButtonSize = '작게' | '보통' | '크게';
 type Direction = 'row' | 'column';
 const BUTTON_SCALE: Record<ButtonSize, number> = { 작게: 0.85, 보통: 1, 크게: 1.2 };
 
+const ANIMATIONS = ['Slide In', 'Fade In', '효과 없음'] as const;
+type Animation = (typeof ANIMATIONS)[number];
+type SlideMode = 'auto' | 'manual';
+
 type Design = {
   titleStyle: TextStyleId;
   descStyle: TextStyleId;
-  titleColor: string | null;
-  descColor: string | null;
+  titleColor: TextColor | null;
+  descColor: TextColor | null;
+  customColors: TextColor[]; // 텍스트 색상 메뉴 > 커스텀에서 추가한 색 (모든 텍스트 공용)
   buttonStyles: [ButtonStyle, ButtonStyle];
   buttonSize: Record<Device, ButtonSize>;
   buttonDirection: Record<Device, Direction>;
   buttonFill: boolean; // 가로 영역 채우기: 모바일에만 있는 설정
   layout: Record<Device, LayoutId>; // 공통 설정 > 레이아웃 (모든 슬라이드 공통)
+  ratio: Record<Device, string>; // 공통 설정 > 레이아웃의 비율 (모든 슬라이드 공통)
+  animation: Animation; // 공통 설정 > 애니메이션 (캔버스 동작은 구현하지 않음)
+  slideMode: SlideMode; // 공통 설정 > 슬라이드 방식 (캔버스 동작은 구현하지 않음)
   spacing: Record<Device, Spacing>;
 };
 
@@ -283,11 +372,15 @@ const INITIAL_DESIGN: Design = {
   descStyle: '본문 3',
   titleColor: null,
   descColor: null,
+  customColors: [],
   buttonStyles: ['강조 버튼', '보조 버튼'],
   buttonSize: { desktop: '보통', mobile: '보통' },
   buttonDirection: { desktop: 'row', mobile: 'row' },
   buttonFill: false,
   layout: { desktop: 'bottom-center', mobile: 'bottom-center' },
+  ratio: { desktop: '풀스크린', mobile: '풀스크린' },
+  animation: 'Slide In',
+  slideMode: 'auto',
   spacing: {
     desktop: { titleDesc: 12, textButtons: 36, buttonGap: 8, bottom: 64 },
     mobile: { titleDesc: 12, textButtons: 32, buttonGap: 8, bottom: 64 },
@@ -590,6 +683,7 @@ function SlideView({ slide, index, count, device, design, selected, onSelect, on
   const buttonScale = BUTTON_SCALE[design.buttonSize[device]];
   const isFill = !isDesktop && design.buttonFill;
   const layout = design.layout[device];
+  const noBottomGap = isDesktop && layout === 'center';
   const isLeft = layout === 'bottom-left';
   const direction = design.buttonDirection[device];
   const isRow = direction === 'row';
@@ -613,7 +707,8 @@ function SlideView({ slide, index, count, device, design, selected, onSelect, on
   return (
     <div
       className="absolute inset-0 flex flex-col items-center overflow-hidden"
-      style={{ padding: `${metrics.padTop}px ${metrics.padX}px ${toCanvas(spacing.bottom)}px` }}
+      // 데스크탑 가운데 정렬 레이아웃에서는 버튼↔인디케이터(아래 여백) 간격을 두지 않음
+      style={{ padding: `${metrics.padTop}px ${metrics.padX}px ${noBottomGap ? 0 : toCanvas(spacing.bottom)}px` }}
       onClick={(event) => {
         event.stopPropagation();
         onSelect('section');
@@ -643,7 +738,7 @@ function SlideView({ slide, index, count, device, design, selected, onSelect, on
                 isEditing={editing?.kind === 'title' && editing.device === device}
                 multiline
                 className={textClass(titleStyle.heading)}
-                style={{ ...DM_SANS, fontSize: titleStyle[device], color: design.titleColor ?? colors.strong }}
+                style={{ ...DM_SANS, fontSize: titleStyle[device], color: design.titleColor ? textColorCss(design.titleColor) : colors.strong }}
                 outline={<Outline color={metrics.outline} isSelected={selected === 'title'} />}
                 onClick={() => onTextClick('title', device)}
                 onDone={(value) => onTextDone('title', value)}
@@ -658,7 +753,7 @@ function SlideView({ slide, index, count, device, design, selected, onSelect, on
                 isEditing={editing?.kind === 'description' && editing.device === device}
                 multiline
                 className={textClass(descStyle.heading)}
-                style={{ ...DM_SANS, fontSize: descStyle[device], color: design.descColor ?? colors.soft }}
+                style={{ ...DM_SANS, fontSize: descStyle[device], color: design.descColor ? textColorCss(design.descColor) : colors.soft }}
                 outline={<Outline color={metrics.outline} isSelected={selected === 'description'} />}
                 onClick={() => onTextClick('description', device)}
                 onDone={(value) => onTextDone('description', value)}
@@ -736,8 +831,8 @@ function SlideView({ slide, index, count, device, design, selected, onSelect, on
         </div>
       </div>
 
-      {/* 섹션 아래 여백 핸들: 시안처럼 버튼 바로 아래 12px 영역 */}
-      {showSectionHandles && (
+      {/* 섹션 아래 여백 핸들: 시안처럼 버튼 바로 아래 12px 영역. 데스크탑 가운데 정렬에서는 간격이 없으므로 숨김 */}
+      {showSectionHandles && !noBottomGap && (
         <SpacingHandle
           onStart={onSpacingStart}
           value={spacing.bottom}
@@ -762,10 +857,40 @@ function SlideView({ slide, index, count, device, design, selected, onSelect, on
   );
 }
 
-type CanvasProps = Omit<SlideViewProps, 'device'>;
+// dimDevice: 레이아웃 미리보기 hover 중인 기기. 그 슬라이드 위에 흰색 40% scrim
+// onStep: 보라색 프레임의 이전/다음 버튼
+type CanvasProps = Omit<SlideViewProps, 'device'> & { dimDevice?: Device | null; onStep: (step: -1 | 1) => void };
 
-function Canvas(props: CanvasProps) {
+// 슬라이드 선택 시 보라색 프레임 + 오른쪽 위 이전/다음 버튼 (시안 2·3과 같음)
+function SlideFrame({ className, style, onStep }: { className: string; style?: CSSProperties; onStep: (step: -1 | 1) => void }) {
+  const stepButton = (step: -1 | 1) => (
+    <button
+      type="button"
+      aria-label={step === -1 ? '이전 슬라이드' : '다음 슬라이드'}
+      onClick={(event) => {
+        event.stopPropagation();
+        onStep(step);
+      }}
+      className="pointer-events-auto flex size-[19.167px] shrink-0 cursor-pointer items-center justify-center bg-[#90f] hover:bg-[#7a00cc]"
+    >
+      <img src={step === -1 ? iconChevronLeftWhite : iconChevronRightWhite} alt="" width={11.5} height={11.5} />
+    </button>
+  );
+  return (
+    <div className={`pointer-events-none absolute left-0 border-2 border-solid border-[#90f] ${className}`} style={style}>
+      <div className="absolute top-[-2px] right-[-2px] flex items-center">
+        {stepButton(-1)}
+        {stepButton(1)}
+      </div>
+    </div>
+  );
+}
+
+function Canvas({ dimDevice, onStep, ...props }: CanvasProps) {
   const isSection = props.selected === 'section';
+  // 공통 설정 > 레이아웃에서 고른 비율에 맞춘 슬라이드 높이
+  const desktopH = slideHeight('desktop', props.design.ratio.desktop);
+  const mobileH = slideHeight('mobile', props.design.ratio.mobile);
   return (
     // 슬라이드 밖(회색 배경, 헤더, 기기 이름 바 등)을 누르면 선택 해제 → 패널 숨김
     <div className="absolute top-[55px] left-0 h-[839px] w-[1512px]" onClick={() => props.onSelect('none')}>
@@ -773,10 +898,14 @@ function Canvas(props: CanvasProps) {
         <ViewportBar icon={iconDesktop} label="데스크탑" />
         <div className="relative min-h-px w-full flex-1 overflow-hidden bg-white">
           <DesktopHeader />
-          <div className="absolute top-[25.88px] left-0 h-[517.5px] w-[920px]">
+          <div className="absolute top-[25.88px] left-0 w-[920px]" style={{ height: desktopH }}>
             <SlideView {...props} device="desktop" />
+            {dimDevice === 'desktop' && <div className="pointer-events-none absolute inset-0 bg-[rgba(255,255,255,0.4)]" />}
           </div>
-          {isSection && <div className="pointer-events-none absolute top-[26px] left-0 h-[517px] w-[920px] border border-solid border-[#09f]" />}
+          {isSection && (
+            <div className="pointer-events-none absolute top-[26px] left-0 w-[920px] border border-solid border-[#09f]" style={{ height: desktopH - 0.5 }} />
+          )}
+          {isSection && <SlideFrame className="top-[26px] w-[920px]" style={{ height: desktopH + 0.5 }} onStep={onStep} />}
         </div>
       </div>
 
@@ -784,10 +913,12 @@ function Canvas(props: CanvasProps) {
         <ViewportBar icon={iconMobile} label="모바일" />
         <div className="relative min-h-px w-full flex-1 overflow-hidden bg-white">
           <MobileHeader />
-          <div className="absolute top-[28.92px] left-0 h-[406.851px] w-[188px]">
+          <div className="absolute top-[28.92px] left-0 w-[188px]" style={{ height: mobileH }}>
             <SlideView {...props} device="mobile" />
+            {dimDevice === 'mobile' && <div className="pointer-events-none absolute inset-0 bg-[rgba(255,255,255,0.4)]" />}
           </div>
-          {isSection && <div className="pointer-events-none absolute top-[29px] left-0 h-[407px] w-[188px] border border-solid border-[#80ccff]" />}
+          {isSection && <div className="pointer-events-none absolute top-[29px] left-0 w-[188px] border border-solid border-[#80ccff]" style={{ height: mobileH }} />}
+          {isSection && <SlideFrame className="top-[29px] w-[188px]" style={{ height: mobileH }} onStep={onStep} />}
         </div>
       </div>
     </div>
@@ -838,10 +969,32 @@ type ListPanelProps = {
   onOpen: (index: number) => void;
   onReorder: (from: number, to: number) => void;
   onOpenLayout: () => void;
+  onOpenAnimation: () => void;
+  onOpenSlideMode: () => void;
   onAdd: () => void;
 };
 
-function SlideListPanel({ slides, onOpen, onReorder, onOpenLayout, onAdd }: ListPanelProps) {
+// 패널 최대 높이: 시안 799px. 단, 편집 화면은 창 너비에 맞춰 확대되므로 창이 낮으면 화면 아래가 잘림
+// → 브라우저 창에 실제로 보이는 높이(편집 화면 px로 환산)까지만 쓰고, 넘치는 목록은 패널 안에서 스크롤
+const PANEL_TOP = 75;
+const PANEL_BOTTOM_GAP = 20;
+function useVisiblePanelMaxHeight() {
+  const calc = () => {
+    const scale = document.documentElement.clientWidth / CAROUSEL_SCREEN_WIDTH || 1;
+    const visible = Math.floor(window.innerHeight / scale) - PANEL_TOP - PANEL_BOTTOM_GAP;
+    return Math.max(240, Math.min(799, visible));
+  };
+  const [maxHeight, setMaxHeight] = useState(calc);
+  useEffect(() => {
+    const handleResize = () => setMaxHeight(calc());
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  return maxHeight;
+}
+
+function SlideListPanel({ slides, onOpen, onReorder, onOpenLayout, onOpenAnimation, onOpenSlideMode, onAdd }: ListPanelProps) {
+  const panelMaxHeight = useVisiblePanelMaxHeight();
   const dragFrom = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
 
@@ -853,7 +1006,7 @@ function SlideListPanel({ slides, onOpen, onReorder, onOpenLayout, onAdd }: List
   };
 
   return (
-    <div className={`${PANEL_CLASS} flex max-h-[799px] flex-col`}>
+    <div className={`${PANEL_CLASS} flex flex-col`} style={{ maxHeight: panelMaxHeight }}>
       <PanelHeader
         title="슬라이드"
         right={
@@ -865,7 +1018,7 @@ function SlideListPanel({ slides, onOpen, onReorder, onOpenLayout, onAdd }: List
 
       <div className="flex min-h-0 w-[280px] flex-1 flex-col gap-[12px] border-b border-solid border-[rgba(51,62,76,0.1)] pt-[8px] pb-px">
         <div className="flex h-[18px] shrink-0 items-baseline gap-[4px] px-[20px] font-['Pretendard'] text-[12px] leading-[18px] whitespace-nowrap">
-          <span className="font-semibold text-[#333e4c]">진열 중인 슬라이드</span>
+          <span className="font-semibold text-[#333e4c]">아이템</span>
           <span className="font-normal text-[#667080]">
             {slides.length}/{MAX_SLIDES}
           </span>
@@ -944,7 +1097,8 @@ function SlideListPanel({ slides, onOpen, onReorder, onOpenLayout, onAdd }: List
         </div>
         <div className="flex flex-col items-center gap-[8px] px-[16px] pb-[16px]">
           <MenuItem icon={iconLayout} label="레이아웃" onClick={onOpenLayout} />
-          <MenuItem icon={iconError} iconSize={14.222} label="애니메이션" />
+          <MenuItem icon={iconError} iconSize={14.222} label="애니메이션" onClick={onOpenAnimation} />
+          <MenuItem icon={iconSlide} label="슬라이드 방식" onClick={onOpenSlideMode} />
         </div>
       </div>
     </div>
@@ -954,10 +1108,10 @@ function SlideListPanel({ slides, onOpen, onReorder, onOpenLayout, onAdd }: List
 // ---------------------------------------------------------------- 1-1. 레이아웃 패널 (공통 설정)
 
 // 레이아웃 옵션 미리보기 (피그마 panel/layout/option 의 축소 화면 그대로)
-function LayoutPreview({ layout }: { layout: LayoutId }) {
+function LayoutPreview({ layout, height = 132.75 }: { layout: LayoutId; height?: number }) {
   const isLeft = layout === 'bottom-left';
   return (
-    <div className="relative flex h-[132.75px] w-[236px] flex-col items-center justify-center overflow-hidden px-[4.425px] py-[7.867px]">
+    <div className="relative flex w-[236px] flex-col items-center justify-center overflow-hidden px-[4.425px] py-[7.867px]" style={{ height }}>
       <div className="absolute inset-0 bg-[#ddd]" />
       <div className="absolute inset-0 bg-[rgba(0,0,0,0.2)]" />
       <div
@@ -981,8 +1135,76 @@ function LayoutPreview({ layout }: { layout: LayoutId }) {
   );
 }
 
-function LayoutPanel({ design, onDesign, onBack }: { design: Design; onDesign: (patch: Partial<Design>) => void; onBack: () => void }) {
+// 모바일 레이아웃 옵션 미리보기 (피그마 모바일 panel/layout/option 의 세로 축소 화면)
+function MobileLayoutPreview({ layout, height = 233.723 }: { layout: LayoutId; height?: number }) {
+  const isLeft = layout === 'bottom-left';
+  return (
+    <div className="relative flex w-[108px] flex-col items-center justify-center overflow-hidden px-[4.431px] py-[11.077px]" style={{ height }}>
+      <div className="absolute inset-0 bg-[#ddd]" />
+      <div className="absolute inset-0 bg-[rgba(0,0,0,0.2)]" />
+      <div
+        className={`relative flex min-h-px w-full flex-1 flex-col gap-[8.862px] overflow-hidden ${isLeft ? 'items-start' : 'items-center'} ${
+          layout === 'center' ? 'justify-center' : 'justify-end'
+        }`}
+      >
+        <div className={`flex w-full flex-col gap-[3.323px] font-['DM_Sans'] ${isLeft ? 'items-start text-left' : 'items-center text-center'}`} style={DM_SANS}>
+          <p className="w-full text-[3.877px] leading-[1.6] font-normal text-[rgba(255,255,255,0.8)]">Lorem ipsum</p>
+          <p className="w-full text-[11.077px] leading-[1.3] font-medium text-white">Lorem ipsum dolor sit amet</p>
+          <p className="w-full text-[4.154px] leading-[1.5] font-normal text-[rgba(255,255,255,0.8)]">
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Graecis praetorem, consuetudinum, maiores, tribus saluti reprehensa.
+          </p>
+        </div>
+        <div className="flex items-start gap-[2.215px] font-['DM_Sans'] text-[3.6px] leading-[1.2] font-medium whitespace-nowrap" style={DM_SANS}>
+          <span className="rounded-[1.108px] border-[0.277px] border-solid border-transparent bg-white px-[7.477px] py-[3.877px] text-[#111]">
+            Button Label
+          </span>
+          <span className="rounded-[1.108px] border-[0.277px] border-solid border-white px-[7.477px] py-[3.877px] text-white">Button Label</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 미리보기 크기: 너비는 고정, 높이는 비율에 맞춤 (풀스크린 = 피그마 시안 높이)
+const PREVIEW_BOX: Record<Device, { width: number; fullHeight: number }> = {
+  desktop: { width: 236, fullHeight: 132.75 },
+  mobile: { width: 108, fullHeight: 233.723 },
+};
+
+function ratioValue(device: Device, ratio: string) {
+  return RATIO_OPTIONS[device].find((option) => option.label === ratio)?.value ?? null;
+}
+
+function previewHeight(device: Device, ratio: string) {
+  const value = ratioValue(device, ratio);
+  return value === null ? PREVIEW_BOX[device].fullHeight : PREVIEW_BOX[device].width / value;
+}
+
+// 캔버스에 잠깐 보여줄 레이아웃 (미리보기에 마우스를 올린 동안)
+type LayoutPeek = { device: Device; ratio: string; layout: LayoutId };
+
+// 공통 설정 > 레이아웃 (시안 3과 같은 방식). 모든 슬라이드에 한 번에 적용
+// - 비율 칩: 아래 미리보기 높이만 바꿈. 캔버스는 그대로
+// - 미리보기 hover: 캔버스에 그 비율·레이아웃을 미리 보여줌(흰색 40% dim) / 클릭: 비율 + 레이아웃 적용
+function LayoutPanel({
+  design,
+  onApply,
+  onPeek,
+  onBack,
+}: {
+  design: Design;
+  onApply: (device: Device, ratio: string, layout: LayoutId) => void;
+  onPeek: (peek: LayoutPeek | null) => void;
+  onBack: () => void;
+}) {
   const [device, setDevice] = useState<Device>('desktop');
+  // 칩으로 보고 있는 비율 (처음엔 지금 적용된 비율)
+  const [viewRatio, setViewRatio] = useState(design.ratio);
+  // 패널이 닫히면 미리보기도 끝냄
+  useEffect(() => () => onPeek(null), [onPeek]);
+  // 보고 있는 비율이 적용된 비율일 때만 선택 표시
+  const selectedLayout = viewRatio[device] === design.ratio[device] ? design.layout[device] : null;
+  const height = previewHeight(device, viewRatio[device]);
   return (
     <div className={PANEL_CLASS}>
       <PanelHeader title="레이아웃" onBack={onBack} />
@@ -1003,25 +1225,78 @@ function LayoutPanel({ design, onDesign, onBack }: { design: Design; onDesign: (
           );
         })}
       </div>
-      {/* 고른 레이아웃은 모든 슬라이드에 동일하게 적용 */}
-      <div className="flex w-full flex-col gap-[12px] p-[20px]">
-        {LAYOUT_OPTIONS.map((option) => {
-          const isSelected = design.layout[device] === option;
+      {/* 비율 칩 */}
+      <div className="flex w-full items-start gap-[6px] px-[20px] pt-[20px]">
+        {RATIO_OPTIONS[device].map((option) => {
+          const isSelected = viewRatio[device] === option.label;
           return (
             <button
-              key={option}
+              key={option.label}
               type="button"
-              onClick={() => onDesign({ layout: { ...design.layout, [device]: option } })}
-              className={`flex w-[240px] cursor-pointer flex-col rounded-[6px] p-[2px] ${
-                isSelected ? 'border-[1.5px] border-solid border-[#1a66ff]' : 'border-[1.5px] border-solid border-transparent'
+              onClick={() => setViewRatio((prev) => ({ ...prev, [device]: option.label }))}
+              className={`flex min-w-[40px] shrink-0 cursor-pointer items-center justify-center rounded-[6px] px-[8px] py-[4px] font-['Pretendard'] text-[12px] leading-[18px] whitespace-nowrap ${
+                isSelected ? 'bg-[#181d25] font-semibold text-white' : 'bg-[#f6f7f9] font-normal text-[#667080] hover:bg-[#eceef1]'
               }`}
             >
-              <span className="flex w-full overflow-hidden rounded-[6px] border border-solid border-[rgba(51,62,76,0.16)] bg-white p-px">
-                <LayoutPreview layout={option} />
-              </span>
+              {option.label}
             </button>
           );
         })}
+      </div>
+      {/* 데스크탑: 가로 미리보기 세로로 3개 / 모바일: 세로 미리보기 2열 */}
+      <div
+        className={`flex w-full gap-[12px] p-[20px] ${device === 'desktop' ? 'flex-col' : 'flex-wrap content-start items-start'}`}
+        onMouseLeave={() => onPeek(null)}
+      >
+        {(device === 'desktop' ? LAYOUT_OPTIONS : MOBILE_LAYOUT_OPTIONS).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onMouseEnter={() => onPeek({ device, ratio: viewRatio[device], layout: option })}
+            onClick={() => onApply(device, viewRatio[device], option)}
+            className={`flex ${device === 'desktop' ? 'w-[240px]' : 'w-[114px]'} cursor-pointer flex-col rounded-[6px] border-[1.5px] border-solid p-[2px] ${
+              selectedLayout === option ? 'border-[#1a66ff]' : 'border-transparent'
+            }`}
+          >
+            <span className="flex w-full overflow-hidden rounded-[6px] border border-solid border-[rgba(51,62,76,0.16)] bg-white p-px">
+              {device === 'desktop' ? <LayoutPreview layout={option} height={height} /> : <MobileLayoutPreview layout={option} height={height} />}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// 공통 설정 > 애니메이션 (시안 3과 같음). 슬라이드 전환 효과 선택 (캔버스 동작은 구현하지 않음)
+function AnimationPanel({ value, onChange, onBack }: { value: Animation; onChange: (animation: Animation) => void; onBack: () => void }) {
+  return (
+    // 선택 목록이 패널 아래로 펼쳐질 수 있게 overflow 없는 패널 사용
+    <div className={ELEMENT_PANEL_CLASS}>
+      <PanelHeader title="애니메이션" onBack={onBack} />
+      <div className="flex w-[280px] flex-col gap-[12px] border-b border-solid border-[rgba(51,62,76,0.1)] p-[20px]">
+        <p className="font-['Pretendard'] text-[12px] leading-[18px] font-semibold text-[#333e4c]">애니메이션</p>
+        <Dropdown value={value} options={ANIMATIONS} onChange={onChange} />
+      </div>
+    </div>
+  );
+}
+
+// 공통 설정 > 슬라이드 방식 (시안 3과 같음). 자동 전환 / 직접 넘기기 (캔버스 동작은 구현하지 않음)
+function SlideModePanel({ value, onChange, onBack }: { value: SlideMode; onChange: (slideMode: SlideMode) => void; onBack: () => void }) {
+  return (
+    <div className={PANEL_CLASS}>
+      <PanelHeader title="슬라이드 방식" onBack={onBack} />
+      <div className="flex w-[280px] flex-col gap-[12px] p-[20px]">
+        <p className="font-['Pretendard'] text-[12px] leading-[18px] font-semibold text-[#333e4c]">슬라이드 방식</p>
+        <Segmented
+          value={value}
+          options={[
+            { value: 'auto', label: '자동 전환' },
+            { value: 'manual', label: '직접 넘기기' },
+          ]}
+          onChange={onChange}
+        />
       </div>
     </div>
   );
@@ -1387,11 +1662,373 @@ function ColorChip({ color }: { color: string }) {
   return <span className="size-[18px] shrink-0 rounded-[4px] border border-solid border-[rgba(51,62,76,0.16)]" style={{ background: color }} />;
 }
 
-function TextPanel({ kind, design, defaultColor, onDesign }: { kind: 'title' | 'description'; design: Design; defaultColor: string; onDesign: (patch: Partial<Design>) => void }) {
+// 색상 옵션 아래 툴팁 (피그마 tooltip: 위쪽 꼬리 + 검은 말풍선). 부모 group에 hover 시 표시
+function OptionTooltip({ label }: { label: string }) {
+  return (
+    <span className="pointer-events-none invisible absolute top-[calc(100%+4px)] left-1/2 z-10 flex -translate-x-1/2 flex-col items-center group-hover:visible">
+      <img src={iconTooltipTip} alt="" width={10} height={4} className="block" />
+      <span className="rounded-[4px] bg-[#181d25] p-[8px] font-['Pretendard'] text-[12px] leading-[18px] font-medium whitespace-nowrap text-white">
+        {label}
+      </span>
+    </span>
+  );
+}
+
+// 드래그 공용: 누른 자리부터 손을 뗄 때까지 0~1 비율(x, y)을 알려 줌
+function useDragRatio(onMove: (x: number, y: number) => void) {
+  // 드래그 중에도 항상 최신 상태로 계산하도록 (첫 변경에 만든 커스텀 색 자리를 계속 고치게)
+  const latest = useRef(onMove);
+  latest.current = onMove;
+  return {
+    onPointerDown: (event: PointerEvent<HTMLElement>) => {
+      const target = event.currentTarget;
+      target.setPointerCapture(event.pointerId);
+      const move = (clientX: number, clientY: number) => {
+        const rect = target.getBoundingClientRect();
+        latest.current(Math.min(1, Math.max(0, (clientX - rect.left) / rect.width)), Math.min(1, Math.max(0, (clientY - rect.top) / rect.height)));
+      };
+      move(event.clientX, event.clientY);
+      const handleMove = (moveEvent: globalThis.PointerEvent) => move(moveEvent.clientX, moveEvent.clientY);
+      const handleUp = () => {
+        target.removeEventListener('pointermove', handleMove);
+        target.removeEventListener('pointerup', handleUp);
+      };
+      target.addEventListener('pointermove', handleMove);
+      target.addEventListener('pointerup', handleUp);
+    },
+  };
+}
+
+const PICKER_HANDLE_CLASS =
+  'pointer-events-none absolute size-[12px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-solid border-white shadow-[0px_1px_1px_0px_rgba(65,78,97,0.08),0px_2px_8px_0px_rgba(65,78,97,0.16)]';
+
+// 시안 3: 커스텀 색상 피커 (피그마 menu/color/custom). 색 영역 + 색조 + 불투명도 + HEX/불투명도 입력
+function CustomColorPicker({ color, onChange }: { color: TextColor; onChange: (color: TextColor) => void }) {
+  // 손잡이 위치는 HSV로 따로 들고 있음 (검정·회색은 HEX만으로 색조를 알 수 없어서)
+  const [hsv, setHsv] = useState(() => hexToHsv(color.hex));
+  const [hexDraft, setHexDraft] = useState(color.hex.slice(1).toUpperCase());
+  const [opacityDraft, setOpacityDraft] = useState(String(color.opacity));
+  useEffect(() => {
+    setHexDraft(color.hex.slice(1).toUpperCase());
+    setOpacityDraft(String(color.opacity));
+  }, [color.hex, color.opacity]);
+
+  const applyHsv = (next: Hsv) => {
+    setHsv(next);
+    onChange({ hex: hsvToHex(next), opacity: color.opacity });
+  };
+  const areaDrag = useDragRatio((x, y) => applyHsv({ ...hsv, s: x, v: 1 - y }));
+  const hueDrag = useDragRatio((x) => applyHsv({ ...hsv, h: x * 360 }));
+  const opacityDrag = useDragRatio((x) => onChange({ hex: color.hex, opacity: Math.round(x * 100) }));
+
+  const commitHex = (draft: string) => {
+    const clean = draft.replace(/[^0-9a-fA-F]/g, '');
+    const full = clean.length === 3 ? clean.replace(/./g, (c) => c + c) : clean;
+    if (full.length !== 6) return setHexDraft(color.hex.slice(1).toUpperCase());
+    const hex = `#${full.toLowerCase()}`;
+    const next = hexToHsv(hex);
+    setHsv(next.s === 0 || next.v === 0 ? { ...next, h: hsv.h } : next);
+    onChange({ hex, opacity: color.opacity });
+  };
+  const commitOpacity = (draft: string) => {
+    const value = Number(draft);
+    if (draft.trim() === '' || Number.isNaN(value)) return setOpacityDraft(String(color.opacity));
+    onChange({ hex: color.hex, opacity: Math.round(Math.min(100, Math.max(0, value))) });
+  };
+  const hueColor = `hsl(${hsv.h}, 100%, 50%)`;
+
+  return (
+    <div className="absolute top-0 right-[calc(100%+4px)] flex w-[238px] flex-col items-center overflow-hidden rounded-[12px] border border-solid border-[rgba(51,62,76,0.1)] bg-white p-px shadow-[0px_4px_10px_0px_rgba(65,78,97,0.08)]">
+      {/* 채도·명도 영역 */}
+      <div className="flex h-[185px] w-full p-[16px]">
+        <div {...areaDrag} className="relative h-full min-w-px flex-1 cursor-crosshair touch-none rounded-[4px]" style={{ background: hueColor }}>
+          <div className="absolute inset-0 rounded-[4px] bg-gradient-to-r from-white to-[rgba(255,255,255,0)]" />
+          <div className="absolute inset-0 rounded-[4px] bg-gradient-to-t from-black to-[rgba(0,0,0,0)]" />
+          <span className={PICKER_HANDLE_CLASS} style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`, background: color.hex }} />
+        </div>
+      </div>
+      {/* 색조 */}
+      <div className="w-full px-[16px] pt-[4px] pb-[8px]">
+        <div
+          {...hueDrag}
+          className="relative h-[8px] w-full cursor-pointer touch-none rounded-full"
+          style={{ background: 'linear-gradient(90deg, #f00, #ff0 16.67%, #0f0 33.33%, #0ff 50%, #00f 66.67%, #f0f 83.33%, #f00)' }}
+        >
+          <span className={`${PICKER_HANDLE_CLASS} top-1/2`} style={{ left: `${(hsv.h / 360) * 100}%`, background: hueColor }} />
+        </div>
+      </div>
+      {/* 불투명도 */}
+      <div className="w-full px-[16px] pt-[4px] pb-[20px]">
+        <div
+          {...opacityDrag}
+          className="relative h-[8px] w-full cursor-pointer touch-none rounded-full"
+          style={{
+            backgroundImage: `linear-gradient(90deg, rgba(0,0,0,0), ${color.hex}), url(${imgOpacityTrack})`,
+            backgroundSize: 'auto, 5.5px 5.5px',
+          }}
+        >
+          <span className={`${PICKER_HANDLE_CLASS} top-1/2`} style={{ left: `${color.opacity}%`, background: textColorCss(color) }} />
+        </div>
+      </div>
+      {/* HEX / 불투명도 입력 */}
+      <div className="flex w-full items-center gap-[8px] px-[16px] pb-[16px]">
+        <span className="font-['Pretendard'] text-[12px] leading-[18px] font-medium whitespace-nowrap text-[#333e4c]">HEX</span>
+        <div className="flex min-w-px flex-1 items-stretch rounded-[6px] bg-[#f6f7f9] font-['Pretendard'] text-[12px] leading-[18px] font-normal">
+          <label className="flex min-w-px flex-1 items-center gap-[2px] p-[8px]">
+            <span className="text-[#99a0aa]">#</span>
+            <input
+              value={hexDraft}
+              maxLength={6}
+              onChange={(event) => {
+                setHexDraft(event.target.value.toUpperCase());
+                if (/^[0-9a-fA-F]{6}$/.test(event.target.value)) commitHex(event.target.value);
+              }}
+              onBlur={(event) => commitHex(event.target.value)}
+              onKeyDown={(event) => event.key === 'Enter' && commitHex(event.currentTarget.value)}
+              className="w-full min-w-px bg-transparent p-0 text-[#333e4c] outline-none"
+            />
+          </label>
+          <span className="w-px shrink-0 bg-[rgba(51,62,76,0.1)]" />
+          <label className="flex items-center justify-end gap-[2px] py-[8px] pr-[8px] pl-[10px]">
+            <input
+              value={opacityDraft}
+              inputMode="numeric"
+              onChange={(event) => setOpacityDraft(event.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+              onBlur={(event) => commitOpacity(event.target.value)}
+              onKeyDown={(event) => event.key === 'Enter' && commitOpacity(event.currentTarget.value)}
+              className="w-[26px] bg-transparent p-0 text-[#333e4c] outline-none"
+            />
+            <span className="text-[#99a0aa]">%</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 시안 3: 텍스트 색상 메뉴 (피그마 menu/color). 공통 스타일 / 색상 세트 / 커스텀
+// 커스텀 +: 왼쪽에 피커가 열리고, 색을 바꾸는 순간 + 옆에 새 색이 생겨 실시간으로 반영됨
+function TextColorMenu({
+  value,
+  commonColor,
+  slotName,
+  customColors,
+  onSelect,
+  onLiveChange,
+  onCustomColors,
+  onClose,
+  onOpenSlideColor,
+}: {
+  value: TextColor | null;
+  commonColor: string;
+  slotName: string; // 공통 스타일 hover 툴팁 (컬러 슬롯명, 예: 텍스트 - 제목)
+  customColors: TextColor[];
+  onSelect: (color: TextColor | null) => void; // 고르고 메뉴 닫기
+  onLiveChange: (color: TextColor) => void; // 피커 조작 중 실시간 반영 (메뉴 유지)
+  onCustomColors: (colors: TextColor[]) => void;
+  onClose: () => void;
+  onOpenSlideColor: () => void; // 안내 문구의 '색상 메뉴' → 슬라이드 N > 색상 패널
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  // 커스텀 피커: index = 지금 만들고 있는 커스텀 색 자리 (아직 안 바꿨으면 null)
+  const [picker, setPicker] = useState<{ index: number | null; color: TextColor } | null>(null);
+  // 메뉴 밖(색상 칸 제외)을 누르면 닫힘
+  useEffect(() => {
+    const handleDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (ref.current?.contains(target) || ref.current?.parentElement?.firstElementChild?.contains(target)) return;
+      onClose();
+    };
+    document.addEventListener('mousedown', handleDown);
+    return () => document.removeEventListener('mousedown', handleDown);
+  }, [onClose]);
+
+  const handlePickerChange = (color: TextColor) => {
+    let index = picker?.index ?? null;
+    if (index === null) {
+      index = customColors.length;
+      onCustomColors([...customColors, color]);
+    } else {
+      onCustomColors(customColors.map((item, i) => (i === index ? color : item)));
+    }
+    setPicker({ index, color });
+    onLiveChange(color);
+  };
+
+  // hover: 회색 링(선택 시엔 파란 링) + 아래 툴팁. 피커가 열려 있는 동안은 + 만 선택 표시
+  const option = (color: TextColor | null, label: string, key: string) => {
+    const isSelected = !picker && sameColor(value, color);
+    return (
+      <span key={key} className="group relative shrink-0">
+        <button
+          type="button"
+          aria-label={label}
+          onClick={() => onSelect(color)}
+          className={`flex size-[36px] cursor-pointer items-center overflow-hidden rounded-full ${
+            isSelected ? 'border-2 border-solid border-[#1a66ff] p-[4px]' : 'hover:border-2 hover:border-solid hover:border-[rgba(51,62,76,0.16)] hover:p-[4px]'
+          }`}
+        >
+          <span
+            className={`block h-full min-w-px flex-1 rounded-full ${isSelected ? '' : 'border border-solid border-[rgba(51,62,76,0.16)] group-hover:border-0'}`}
+            style={{ background: color ? textColorCss(color) : commonColor }}
+          />
+        </button>
+        <OptionTooltip label={label} />
+      </span>
+    );
+  };
+  const groupTitle = (title: string) => <p className="w-full font-['Pretendard'] text-[11px] leading-[14px] font-medium text-[#667080]">{title}</p>;
+
+  return (
+    <div
+      ref={ref}
+      className="absolute top-[calc(100%+4px)] left-0 z-30 flex w-[240px] flex-col rounded-[8px] border border-solid border-[rgba(51,62,76,0.1)] bg-white px-px pt-[13px] pb-px shadow-[0px_0px_1px_0px_rgba(65,78,97,0.08),0px_16px_64px_0px_rgba(65,78,97,0.16)]"
+    >
+      {picker && <CustomColorPicker color={picker.color} onChange={handlePickerChange} />}
+      <div className="w-full px-[12px] pb-[12px]">
+        <div className="flex w-full items-center gap-[8px] rounded-[8px] bg-[#f6f7f9] px-[8px] py-[12px]">
+          <img src={iconInformation} alt="" width={16} height={16} />
+          <p className="min-w-px flex-1 font-['Pretendard'] text-[11px] leading-[14px] font-normal text-[#667080]">
+            슬라이드 위 모든 요소의 색상은
+            <br />
+            <button type="button" onClick={onOpenSlideColor} className="cursor-pointer underline hover:text-[#333e4c]">
+              색상 메뉴
+            </button>
+            에서 한 번에 수정할 수 있어요
+          </p>
+        </div>
+      </div>
+      <div className="flex w-full flex-col gap-[8px] px-[12px] pb-[20px]">
+        {groupTitle('공통 스타일')}
+        <div className="flex w-full flex-wrap gap-[8px]">{option(null, slotName, 'common')}</div>
+      </div>
+      <div className="flex w-full flex-col gap-[8px] px-[12px] pb-[20px]">
+        {groupTitle('색상 세트')}
+        <div className="flex w-full flex-wrap gap-[8px]">{COLOR_SET.map((hex) => option({ hex, opacity: 100 }, hex.toUpperCase(), `set-${hex}`))}</div>
+      </div>
+      <div className="flex w-full flex-col gap-[8px] px-[12px] pb-[20px]">
+        {groupTitle('커스텀')}
+        <div className="flex w-full flex-wrap gap-[8px]">
+          <span className="group relative shrink-0">
+            <button
+              type="button"
+              aria-label="새로운 색상 추가"
+              onClick={() => setPicker(picker ? null : { index: null, color: { hex: '#000000', opacity: 100 } })}
+              className={`flex size-[36px] cursor-pointer items-center justify-center rounded-full border-solid ${
+                picker ? 'border-2 border-[#1a66ff]' : 'border border-[rgba(51,62,76,0.16)] hover:border-2'
+              }`}
+            >
+              <img src={iconPlusSmall} alt="" width={16} height={16} />
+            </button>
+            <OptionTooltip label="새로운 색상 추가" />
+          </span>
+          {customColors.map((color, index) => option(color, color.hex.toUpperCase(), `custom-${index}`))}
+        </div>
+      </div>
+      <button
+        type="button"
+        className={`flex w-full cursor-pointer items-center gap-[12px] rounded-b-[7px] border-t border-solid border-[rgba(51,62,76,0.1)] px-[12px] pt-[12px] pb-[10px] text-left ${HOVER_LAYER}`}
+      >
+        <span className="min-w-px flex-1 truncate font-['Pretendard'] text-[12px] leading-[18px] font-normal text-black">공통 스타일 편집</span>
+        <img src={iconChevronRightEdge} alt="" width={18} height={18} />
+      </button>
+    </div>
+  );
+}
+
+// 텍스트 스타일 선택 (시안 3과 같은 메뉴, 피그마 menu/textStyle). 'Ag 스타일명'을 실제 크기 차이로 보여 줌
+function TextStyleSelect({ value, onChange }: { value: TextStyleId; onChange: (id: TextStyleId) => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  // 바깥을 누르면 닫힘
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleDown);
+    return () => document.removeEventListener('mousedown', handleDown);
+  }, [isOpen]);
+
+  const item = (style: (typeof TEXT_STYLES)[number]) => (
+    <button
+      key={style.id}
+      type="button"
+      onClick={() => {
+        onChange(style.id);
+        setIsOpen(false);
+      }}
+      className={`flex h-[38px] w-full shrink-0 cursor-pointer items-center gap-[8px] overflow-hidden px-[12px] py-[10px] text-left leading-none whitespace-nowrap text-black ${
+        style.id === value ? 'bg-[#f5f8ff]' : HOVER_LAYER
+      } ${style.heading ? 'font-bold tracking-[-0.0667px]' : 'font-normal'}`}
+      style={{ fontSize: style.menu }}
+    >
+      <span className="font-['DM_Sans']" style={DM_SANS}>
+        Ag
+      </span>
+      <span className="min-w-px flex-1 truncate font-['Pretendard']">{style.id}</span>
+    </button>
+  );
+
+  return (
+    <div ref={ref} className="relative w-full">
+      <button
+        type="button"
+        onClick={() => setIsOpen((open) => !open)}
+        className={`flex h-[34px] w-full cursor-pointer items-center gap-[6px] rounded-[6px] border border-solid py-[9px] pr-[9px] pl-[12px] text-left ${
+          isOpen ? 'border-[#1a66ff]' : 'border-[rgba(51,62,76,0.1)] hover:bg-[rgba(24,29,37,0.02)]'
+        }`}
+      >
+        <span className="min-w-px flex-1 font-['Pretendard'] text-[12px] leading-[18px] font-normal text-black">{value}</span>
+        <img src={iconChevronDownPanel} alt="" width={16} height={16} className={isOpen ? 'rotate-180' : ''} />
+      </button>
+      {isOpen && (
+        <div className="absolute top-[calc(100%+4px)] left-0 z-30 flex w-[240px] flex-col items-center overflow-hidden rounded-[8px] border border-solid border-[rgba(51,62,76,0.1)] bg-white p-px shadow-[0px_0px_1px_0px_rgba(65,78,97,0.08),0px_16px_64px_0px_rgba(65,78,97,0.16)]">
+          {/* 목록이 화면 아래로 잘리지 않게 높이를 제한하고 스크롤 (피그마 list: overflow-y-auto) */}
+          <div className="flex max-h-[360px] w-full flex-col items-center overflow-x-hidden overflow-y-auto pt-[16px]">
+            {TEXT_STYLES.filter((style) => style.heading).map(item)}
+            {TEXT_STYLES.filter((style) => !style.heading).map(item)}
+          </div>
+          {/* 커스텀·공통 스타일 편집은 이번 범위 밖 (모양만) */}
+          <button
+            type="button"
+            className={`flex h-[38px] w-[238px] shrink-0 cursor-pointer items-center px-[12px] py-[10px] text-left font-['Pretendard'] text-[12px] leading-[18px] font-normal text-black ${HOVER_LAYER}`}
+          >
+            커스텀
+          </button>
+          <button
+            type="button"
+            className={`flex w-full cursor-pointer items-center gap-[12px] border-t border-solid border-[rgba(51,62,76,0.1)] px-[12px] pt-[12px] pb-[10px] text-left ${HOVER_LAYER}`}
+          >
+            <span className="min-w-px flex-1 truncate font-['Pretendard'] text-[12px] leading-[18px] font-normal text-black">공통 스타일 편집</span>
+            <img src={iconChevronRightEdge} alt="" width={18} height={18} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TextPanel({
+  kind,
+  design,
+  defaultColor,
+  onDesign,
+  onOpenSlideColor,
+}: {
+  kind: 'title' | 'description';
+  design: Design;
+  defaultColor: string;
+  onDesign: (patch: Partial<Design>) => void;
+  onOpenSlideColor: () => void; // 색상 메뉴 안내의 '색상 메뉴' → 지금 슬라이드의 색상 패널
+}) {
   const styleKey = kind === 'title' ? 'titleStyle' : 'descStyle';
   const colorKey = kind === 'title' ? 'titleColor' : 'descColor';
-  const colorName = (name: string) => TEXT_COLORS.find((color) => color.name === name);
-  const currentColor = TEXT_COLORS.find((color) => color.value === design[colorKey]) ?? TEXT_COLORS[0];
+  // 모드 1: 텍스트 색은 모든 슬라이드 공통 (design)
+  const colorValue = design[colorKey];
+  // 공통 스타일 이름 = 컬러 슬롯명 (색상 칸·툴팁 공용)
+  const commonName = kind === 'title' ? '텍스트 - 제목' : '텍스트 - 설명';
+  const [isColorMenuOpen, setColorMenuOpen] = useState(false);
 
   return (
     <div className={ELEMENT_PANEL_CLASS}>
@@ -1423,22 +2060,53 @@ function TextPanel({ kind, design, defaultColor, onDesign }: { kind: 'title' | '
           <p className={SECTION_TITLE_CLASS}>스타일</p>
           <p className={NOTE_CLASS}>모든 슬라이드에 동일하게 적용됩니다</p>
         </div>
-        <Dropdown value={design[styleKey]} options={TEXT_STYLES.map((style) => style.id)} onChange={(id) => onDesign({ [styleKey]: id })} />
+        <TextStyleSelect value={design[styleKey]} onChange={(id) => onDesign({ [styleKey]: id })} />
       </div>
 
       <div className="flex w-full flex-col gap-[12px] p-[20px]">
         <p className={SECTION_TITLE_CLASS}>색상</p>
-        <Dropdown
-          value={currentColor.name}
-          options={TEXT_COLORS.map((color) => color.name)}
-          onChange={(name) => onDesign({ [colorKey]: colorName(name)?.value ?? null })}
-          renderLabel={(name) => (
-            <span className="flex min-w-px items-center gap-[6px]">
-              <ColorChip color={colorName(name)?.value ?? defaultColor} />
-              <span className="truncate">{name}</span>
+        <div className="relative w-full">
+          {/* 공통 스타일이면 슬롯명, 색을 골랐으면 HEX + 불투명도 (시안 3과 같음) */}
+          <button
+            type="button"
+            onClick={() => setColorMenuOpen((open) => !open)}
+            className={`flex h-[34px] w-full cursor-pointer items-center overflow-hidden rounded-[6px] border border-solid bg-white text-left ${
+              isColorMenuOpen ? 'border-[#1a66ff]' : 'border-[rgba(51,62,76,0.1)] hover:border-[rgba(51,62,76,0.2)]'
+            }`}
+          >
+            <span className="flex min-w-px flex-1 items-center gap-[6px] px-[8px] py-[7px]">
+              <ColorChip color={colorValue ? textColorCss(colorValue) : defaultColor} />
+              <span className="min-w-px flex-1 truncate font-['Pretendard'] text-[12px] leading-[18px] font-normal text-black">
+                {colorValue ? colorValue.hex.slice(1).toUpperCase() : commonName}
+              </span>
             </span>
+            {colorValue && (
+              <>
+                <span className="h-full w-px shrink-0 bg-[rgba(51,62,76,0.1)]" />
+                <span className="flex h-full shrink-0 items-center justify-end gap-[2px] px-[8px] font-['Pretendard'] font-normal">
+                  <span className="w-[20px] text-right text-[12px] leading-[18px] text-[#333e4c]">{colorValue.opacity}</span>
+                  <span className="text-[11px] leading-[14px] text-[#99a0aa]">%</span>
+                </span>
+              </>
+            )}
+          </button>
+          {isColorMenuOpen && (
+            <TextColorMenu
+              value={colorValue}
+              commonColor={defaultColor}
+              slotName={commonName}
+              customColors={design.customColors}
+              onSelect={(color) => {
+                onDesign({ [colorKey]: color });
+                setColorMenuOpen(false);
+              }}
+              onLiveChange={(color) => onDesign({ [colorKey]: color })}
+              onCustomColors={(customColors) => onDesign({ customColors })}
+              onClose={() => setColorMenuOpen(false)}
+              onOpenSlideColor={onOpenSlideColor}
+            />
           )}
-        />
+        </div>
       </div>
     </div>
   );
@@ -1608,7 +2276,7 @@ function ButtonPanel({
 
 // ---------------------------------------------------------------- 화면
 
-type PanelView = 'list' | 'detail' | 'background' | 'color' | 'layout';
+type PanelView = 'list' | 'detail' | 'background' | 'color' | 'layout' | 'animation' | 'slide-mode';
 
 // [Carousel 슬라이드 편집] 데모 화면
 export function CarouselScreen() {
@@ -1620,6 +2288,11 @@ export function CarouselScreen() {
   const [selected, setSelected] = useState<Selected>('section');
   // 모든 슬라이드에 공통으로 적용되는 스타일·배치·간격
   const [design, setDesign] = useState(INITIAL_DESIGN);
+  // 공통 설정 > 레이아웃 미리보기에 마우스를 올린 동안 캔버스에만 잠깐 보여줄 비율·레이아웃
+  const [peek, setPeek] = useState<LayoutPeek | null>(null);
+  const canvasDesign = peek
+    ? { ...design, ratio: { ...design.ratio, [peek.device]: peek.ratio }, layout: { ...design.layout, [peek.device]: peek.layout } }
+    : design;
   // 캔버스에서 글자를 고치는 중인 텍스트(데스크탑·모바일 중 클릭한 쪽)
   const [editing, setEditing] = useState<EditingText>(null);
 
@@ -1683,10 +2356,13 @@ export function CarouselScreen() {
   return (
     <div className="relative h-[894px] w-[1512px] overflow-hidden bg-[#e4e6e9] select-none">
       <Canvas
+        dimDevice={peek?.device ?? null}
+        // 이전/다음: 끝에서 넘기면 반대쪽 끝으로. 열려 있던 패널은 그대로 두고 보는 슬라이드만 바뀜
+        onStep={(step) => setActiveIndex((current) => (current + step + slides.length) % slides.length)}
         slide={activeSlide}
         index={activeIndex}
         count={slides.length}
-        design={design}
+        design={canvasDesign}
         selected={selected}
         onSelect={(next) => {
           // 편집 중에 다른 곳을 누르면 먼저 편집을 끝내서(저장) 고친 글자가 데스크탑·모바일에 반영되게 함
@@ -1714,6 +2390,8 @@ export function CarouselScreen() {
               slides={slides}
               onReorder={reorder}
               onOpenLayout={() => setPanel('layout')}
+              onOpenAnimation={() => setPanel('animation')}
+              onOpenSlideMode={() => setPanel('slide-mode')}
               onAdd={addSlide}
               onOpen={(index) => {
                 setActiveIndex(index);
@@ -1726,7 +2404,22 @@ export function CarouselScreen() {
           )}
           {panel === 'background' && <BackgroundPanel slide={activeSlide} onBack={() => setPanel('detail')} onChange={updateActive} />}
           {panel === 'color' && <ColorPanel slide={activeSlide} onBack={() => setPanel('detail')} onChange={updateActive} />}
-          {panel === 'layout' && <LayoutPanel design={design} onDesign={updateDesign} onBack={() => setPanel('list')} />}
+          {panel === 'slide-mode' && (
+            <SlideModePanel value={design.slideMode} onChange={(slideMode) => updateDesign({ slideMode })} onBack={() => setPanel('list')} />
+          )}
+          {panel === 'animation' && (
+            <AnimationPanel value={design.animation} onChange={(animation) => updateDesign({ animation })} onBack={() => setPanel('list')} />
+          )}
+          {panel === 'layout' && (
+            <LayoutPanel
+              design={design}
+              onApply={(device, ratio, layout) =>
+                setDesign((prev) => ({ ...prev, ratio: { ...prev.ratio, [device]: ratio }, layout: { ...prev.layout, [device]: layout } }))
+              }
+              onPeek={setPeek}
+              onBack={() => setPanel('list')}
+            />
+          )}
         </>
       )}
       {(selected === 'title' || selected === 'description') && (
@@ -1736,6 +2429,10 @@ export function CarouselScreen() {
           design={design}
           defaultColor={selected === 'title' ? colors.strong : colors.soft}
           onDesign={updateDesign}
+          onOpenSlideColor={() => {
+            setSelected('section');
+            setPanel('color');
+          }}
         />
       )}
       {selected === 'buttons' && <ButtonPanel slide={activeSlide} design={design} onDesign={updateDesign} onSlide={updateActive} />}
