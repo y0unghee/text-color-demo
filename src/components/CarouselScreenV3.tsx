@@ -12,12 +12,15 @@ import iconMobile from '../assets/figma/carousel/mobile.svg';
 import iconArrowLeft from '../assets/figma/carousel/arrow-left.svg';
 import iconArrowRight from '../assets/figma/carousel/arrow-right.svg';
 import iconOverflow from '../assets/figma/carousel/overflow.svg';
+import iconOverflowRow from '../assets/figma/carousel/overflow-row.svg';
+import iconCopy from '../assets/figma/carousel/copy.svg';
+import iconPlus from '../assets/figma/carousel/plus.svg';
+import iconDeleteMenu from '../assets/figma/carousel/delete-menu.svg';
 import iconChevronRightEdge from '../assets/figma/carousel/chevron-right-edge.svg';
 import iconChevronRight from '../assets/figma/carousel/chevron-right.svg';
 import iconImageFilled from '../assets/figma/carousel/image-filled.svg';
 import iconReorderDot from '../assets/figma/carousel/reorder-dot.svg';
 import iconBack from '../assets/figma/carousel/back.svg';
-import iconDeleteSlide from '../assets/figma/carousel/delete-slide.svg';
 import iconImage from '../assets/figma/carousel/image.svg';
 import iconLayer from '../assets/figma/carousel/layer.svg';
 import iconSync from '../assets/figma/carousel/sync.svg';
@@ -78,6 +81,14 @@ const MAX_SLIDES: Record<'intro' | 'hero', number> = { intro: 10, hero: 4 };
 
 // scheme: 'light' = 밝은 색상(흰 글자), 'dark' = 어두운 색상(검은 글자)
 type Scheme = 'light' | 'dark';
+// 색상 패널 'Scheme' (피그마 panel/color): 흰색 / 연회색 / 검정. 배경색만 바꿈
+type Background = 'white' | 'gray' | 'dark';
+const BACKGROUND_OPTIONS: { value: Background; color: string; chip: string; text: string }[] = [
+  { value: 'white', color: '#fff', chip: '#1a1715', text: '#000' },
+  { value: 'gray', color: '#eff1f4', chip: '#1a1715', text: '#000' },
+  { value: 'dark', color: '#14110f', chip: '#fff', text: '#fff' },
+];
+const backgroundColor = (background: Background) => BACKGROUND_OPTIONS.find((option) => option.value === background)?.color ?? '#fff';
 type SlideButton = { label: string; link: string };
 type Slide = {
   id: number;
@@ -91,7 +102,8 @@ type Slide = {
   fileName: string;
   mediaType: 'image' | 'video';
   overlay: number; // 오버레이 불투명도(%)
-  scheme: Scheme;
+  scheme: Scheme; // 글자/버튼색
+  background: Background; // 색상 패널 > Scheme: 섹션 배경색만 바뀜
   link: string;
   layout: Record<Device, LayoutId>; // 시안 2: 레이아웃은 슬라이드마다 따로 설정
   titleStyle: TextStyleId; // 시안 2: 텍스트 스타일도 슬라이드마다
@@ -127,6 +139,7 @@ function makeSlide(id: number, content: SlideContent): Slide {
     mediaType: 'image',
     overlay: 0,
     scheme: 'light',
+    background: 'white',
     link: '',
     layout: { desktop: 'bottom-center', mobile: 'bottom-center' },
     titleStyle: '제목 3',
@@ -289,6 +302,23 @@ const HERO_SLIDES: Slide[] = HERO_CONTENTS.map(({ noTitle, ...content }, index) 
   const slide = makeHeroSlide(101 + index, content);
   return noTitle ? { ...slide, visible: { ...slide.visible, title: false } } : slide;
 });
+
+// ---------------------------------------------------------------- 아이템을 모두 지웠을 때 캔버스에 보여 줄 견본 (피그마 3367:649078)
+// 편집할 수 없는 자리 표시용 슬라이드. 배경 없음(회색) + 시안 기본 문구
+const PLACEHOLDER_SLIDE: Record<SectionId, Slide> = {
+  intro: (() => {
+    const slide = makeSlide(0, {
+      title: 'Lorem ipsum dolor sit amet',
+      description: HERO_DESCRIPTION,
+      buttons: ['Button Label', 'Button Label'],
+      image: null,
+    });
+    return { ...slide, overline: 'Lorem ipsum', overlineStyle: '캡션 1', visible: { ...slide.visible, overline: true } };
+  })(),
+  hero: makeHeroSlide(0, { title: 'Lorem ipsum dolor', image: null }),
+};
+// 견본의 인디케이터 개수 (인트로 시안 5개, 히어로는 썸네일 4칸)
+const PLACEHOLDER_COUNT: Record<SectionId, number> = { intro: 5, hero: 4 };
 
 // 한글은 DM Sans에 없으므로 Pretendard로 표시
 const SITE_FONT = "font-['DM_Sans',_'Pretendard']";
@@ -661,7 +691,90 @@ function CursorSnackbar({ label, clientX, clientY }: { label: string; clientX: n
   );
 }
 
+// 간격 값 범위 (실제 px). 드래그·입력 모두 같은 범위
+const SPACING_MIN = 0;
+const SPACING_MAX = 200;
+const clampSpacing = (value: number) => Math.min(SPACING_MAX, Math.max(SPACING_MIN, Math.round(value)));
+
+// 간격 핸들을 클릭(드래그 없이)하면 핸들 아래에 뜨는 숫자 입력칸. 화면 맨 위 레이어에 그림
+// - 입력·↑↓(Shift: 10씩) 즉시 캔버스에 반영 / Enter·바깥 클릭: 확정 / Esc: 처음 값으로 되돌림
+function SpacingInput({ anchor, value, onChange, onClose }: { anchor: DOMRect; value: number; onChange: (value: number) => void; onClose: () => void }) {
+  const [text, setText] = useState(String(value));
+  const original = useRef(value);
+  // Enter·Esc로 닫힌 뒤 blur가 한 번 더 와도 무시
+  const closed = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+  const layer = document.getElementById(CURSOR_LAYER_ID);
+  if (!layer) return null;
+  const rect = layer.getBoundingClientRect();
+  const scale = rect.width / layer.offsetWidth || 1;
+
+  const apply = (next: number) => {
+    const clamped = clampSpacing(next);
+    setText(String(clamped));
+    onChange(clamped);
+  };
+  const close = () => {
+    closed.current = true;
+    onClose();
+  };
+  const commit = () => {
+    if (closed.current) return;
+    const parsed = Number(text);
+    // 숫자가 아니거나 비어 있으면 처음 값으로
+    if (text.trim() === '' || !Number.isFinite(parsed)) onChange(original.current);
+    else onChange(clampSpacing(parsed));
+    close();
+  };
+  const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
+
+  return createPortal(
+    <div
+      className="pointer-events-auto absolute flex -translate-x-1/2 items-center gap-[2px] rounded-[4px] bg-[#333e4c] py-[4px] pr-[8px] pl-[6px] shadow-[0px_4px_10px_0px_rgba(65,78,97,0.16)]"
+      style={{
+        left: (anchor.left + anchor.width / 2 - rect.left) / scale,
+        top: (anchor.bottom - rect.top) / scale + 6,
+      }}
+      onPointerDown={stop}
+      onClick={stop}
+    >
+      <input
+        ref={inputRef}
+        value={text}
+        inputMode="numeric"
+        aria-label="간격(px)"
+        className="w-[32px] rounded-[2px] bg-[rgba(255,255,255,0.12)] px-[4px] py-[2px] text-right font-['Pretendard'] text-[11px] leading-[14px] text-white outline-none focus:bg-[rgba(255,255,255,0.2)]"
+        onChange={(event) => {
+          const next = event.target.value.replace(/[^0-9]/g, '');
+          setText(next);
+          if (next !== '') onChange(clampSpacing(Number(next)));
+        }}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === 'Enter') commit();
+          else if (event.key === 'Escape') {
+            onChange(original.current);
+            close();
+          } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            event.preventDefault();
+            const step = (event.shiftKey ? 10 : 1) * (event.key === 'ArrowUp' ? 1 : -1);
+            apply((Number(text) || 0) + step);
+          }
+        }}
+        onBlur={commit}
+      />
+      <span className="font-['Pretendard'] text-[10px] leading-[14px] text-[rgba(255,255,255,0.7)]">px</span>
+    </div>,
+    layer,
+  );
+}
+
 // direction: vertical = 위아래 간격(가로 막대), horizontal = 버튼 사이 간격(세로 막대)
+// 드래그: 간격 조절 / 움직이지 않고 클릭: 숫자 입력칸(SpacingInput)
 function SpacingHandle({
   direction = 'vertical',
   value,
@@ -688,7 +801,10 @@ function SpacingHandle({
     y: number;
     value: number;
     scale: number;
+    moved: boolean;
   } | null>(null);
+  // 입력칸 위치 기준 (핸들 영역, 화면 좌표). null이면 닫힘
+  const [inputAnchor, setInputAnchor] = useState<DOMRect | null>(null);
   const isHorizontal = direction === 'horizontal';
 
   const handleDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -697,7 +813,7 @@ function SpacingHandle({
     element.setPointerCapture(event.pointerId);
     // 화면 전체가 창 너비에 맞춰 확대·축소돼 있으므로 실제 픽셀 → 캔버스 px로 환산
     const scale = element.getBoundingClientRect().width / element.offsetWidth || 1;
-    start.current = { x: event.clientX, y: event.clientY, value, scale };
+    start.current = { x: event.clientX, y: event.clientY, value, scale, moved: false };
     setIsDragging(true);
     onStart?.();
   };
@@ -708,13 +824,18 @@ function SpacingHandle({
     if (!from) return;
     // 위로(버튼 사이는 오른쪽으로) 끌수록 간격이 넓어짐
     const moved = isHorizontal ? event.clientX - from.x : from.y - event.clientY;
+    // 조금 흔들린 건 클릭으로 봄
+    if (!from.moved && Math.abs(event.clientX - from.x) < 3 && Math.abs(event.clientY - from.y) < 3) return;
+    from.moved = true;
     const next = Math.round(from.value + (moved / from.scale) * factor);
-    onChange(Math.min(200, Math.max(0, next)));
+    onChange(clampSpacing(next));
   };
 
-  const handleUp = () => {
+  const handleUp = (event: PointerEvent<HTMLDivElement>) => {
+    const wasClick = start.current && !start.current.moved;
     start.current = null;
     setIsDragging(false);
+    if (wasClick && event.type === 'pointerup') setInputAnchor(event.currentTarget.getBoundingClientRect());
   };
 
   return (
@@ -723,7 +844,7 @@ function SpacingHandle({
       // hover·pressed: 간격 영역 전체에 분홍 10%
       style={{
         ...style,
-        background: isHovered || isDragging ? 'rgba(255,16,204,0.1)' : undefined,
+        background: isHovered || isDragging || inputAnchor ? 'rgba(255,16,204,0.1)' : undefined,
       }}
       onPointerDown={handleDown}
       onPointerMove={handleMove}
@@ -738,7 +859,8 @@ function SpacingHandle({
     >
       <span className={`rounded-[16px] bg-[#ff10cc] ${isHorizontal ? 'h-[16px] w-[2px]' : 'h-[2px] w-[16px]'}`} />
       {/* 드래그 중: 간격 숫자가 마우스를 따라감 (hover 설명은 시안 3에서 뺌) */}
-      {pointer && isDragging && <CursorSnackbar label={String(value)} clientX={pointer.x} clientY={pointer.y} />}
+      {pointer && isDragging && start.current?.moved && <CursorSnackbar label={String(value)} clientX={pointer.x} clientY={pointer.y} />}
+      {inputAnchor && <SpacingInput anchor={inputAnchor} value={value} onChange={onChange} onClose={() => setInputAnchor(null)} />}
     </div>
   );
 }
@@ -856,6 +978,8 @@ function EditableText({
 }
 
 type SlideViewProps = {
+  // 슬라이드 선택 단계의 간격 핸들 표시 여부. '슬라이드' 목록 패널일 땐 숨기고 '슬라이드 N' 패널부터 보임 (간격은 슬라이드별)
+  showSpacing: boolean;
   slide: Slide;
   index: number;
   count: number;
@@ -894,6 +1018,7 @@ function SlideBody({
   isLeft,
   handleInset,
   colors,
+  showSpacing,
   gapHandles = true,
 }: SlideBodyProps) {
   const metrics = METRICS[device];
@@ -917,7 +1042,7 @@ function SlideBody({
   // 간격 핸들은 피그마 시안대로 데스크탑 캔버스에만 표시
   // 히어로는 슬라이드 선택 단계 대신 글 카드를 눌렀을 때 요소 사이 간격을 보여 줌
   const isCard = selected === 'card';
-  const showSectionHandles = ((isSection && gapHandles) || isCard) && isDesktop;
+  const showSectionHandles = ((isSection && gapHandles && showSpacing) || isCard) && isDesktop;
   // 간격 영역이 좁아도 잡을 수 있게 최소 8px (시안의 제목↔설명 마커 높이)
   const handleSize = (real: number) => Math.max(toCanvas(real), 8);
   const buttonScale = BUTTON_SCALE[slide.buttonSize[device]];
@@ -1077,7 +1202,7 @@ function SlideView(props: SlideViewProps) {
   const toCanvas = (real: number) => real / factor;
   const setSpacing = (patch: Partial<Spacing>) => onSpacingChange(device, patch);
   // 간격 핸들은 피그마 시안대로 데스크탑 캔버스에만 표시
-  const showSectionHandles = selected === 'section' && isDesktop;
+  const showSectionHandles = selected === 'section' && isDesktop && props.showSpacing;
   const layout = slide.layout[device];
   const isLeft = layout === 'bottom-left';
 
@@ -1093,7 +1218,7 @@ function SlideView(props: SlideViewProps) {
       }}
     >
       {/* 배경: 이미지가 없으면 회색 */}
-      <div className="absolute inset-0 overflow-hidden bg-white">
+      <div className="absolute inset-0 overflow-hidden" style={{ background: backgroundColor(slide.background) }}>
         {image ? (
           <img
             src={image}
@@ -1227,7 +1352,7 @@ function HeroSlideView(props: SlideViewProps & { thumbnails: (string | null)[] }
   const factor = REAL_PER_CANVAS[device];
   const spacing = slide.spacing[device];
   const toCanvas = (real: number) => real / factor;
-  const showSectionHandles = selected === 'section' && isDesktop;
+  const showSectionHandles = selected === 'section' && isDesktop && props.showSpacing;
   const layout = slide.layout[device];
   const isLeft = layout === 'bottom-left';
   const glass: CSSProperties = { background: surface, backdropFilter: `blur(${metrics.blur}px)` };
@@ -1242,8 +1367,9 @@ function HeroSlideView(props: SlideViewProps & { thumbnails: (string | null)[] }
 
   return (
     <div
-      className="absolute inset-0 bg-white"
-      style={{ padding: metrics.sectionPad }}
+      className="absolute inset-0"
+      // 섹션 배경색 (색상 패널 > Scheme). 미디어 둘레 여백에 보임
+      style={{ padding: metrics.sectionPad, background: backgroundColor(slide.background) }}
       onClick={(event) => {
         event.stopPropagation();
         onSelect('section');
@@ -1448,7 +1574,8 @@ function Canvas({ sections, onBackground }: { sections: CanvasSection[]; onBackg
 
 const PANEL_CLASS = 'absolute top-[75px] right-[20px] z-10 w-[280px] overflow-hidden rounded-[12px] bg-white shadow-[0px_4px_10px_0px_rgba(65,78,97,0.08)]';
 
-function PanelHeader({ title, onBack, right }: { title: string; onBack?: () => void; right?: ReactNode }) {
+// subtitle: 제목 옆에 작고 연한 회색으로 붙는 보조 표시 (예: 배경  슬라이드 1)
+function PanelHeader({ title, subtitle, onBack, right }: { title: string; subtitle?: string; onBack?: () => void; right?: ReactNode }) {
   return (
     <div className={`flex h-[52px] shrink-0 items-center gap-[8px] py-[16px] pr-[16px] ${onBack ? 'pl-[16px]' : 'pl-[20px]'}`}>
       {onBack && (
@@ -1456,7 +1583,10 @@ function PanelHeader({ title, onBack, right }: { title: string; onBack?: () => v
           <img src={iconBack} alt="" width={18} height={18} />
         </button>
       )}
-      <p className="min-w-px flex-1 font-['Pretendard'] text-[14px] leading-[20px] font-semibold whitespace-nowrap text-black">{title}</p>
+      <div className="flex min-w-px flex-1 items-baseline gap-[6px] whitespace-nowrap">
+        <p className="font-['Pretendard'] text-[14px] leading-[20px] font-semibold text-black">{title}</p>
+        {subtitle && <p className="truncate font-['Pretendard'] text-[12px] leading-[18px] font-normal text-[#99a0aa]">{subtitle}</p>}
+      </div>
       {right}
     </div>
   );
@@ -1517,6 +1647,8 @@ type ListPanelProps = {
   onOpen: (index: number) => void;
   onReorder: (from: number, to: number) => void;
   onAdd: () => void;
+  onDelete: (index: number) => void;
+  onDuplicate: (index: number) => void;
   tab: ListTab;
   onTab: (tab: ListTab) => void;
   onOpenCommonLayout: () => void;
@@ -1579,9 +1711,24 @@ function CommonSettings({
   );
 }
 
-function SlideListPanel({ slides, maxSlides, onOpen, onReorder, onAdd, tab, onTab, onOpenCommonLayout, onOpenAnimation, onOpenSlideMode }: ListPanelProps) {
+function SlideListPanel({
+  slides,
+  maxSlides,
+  onOpen,
+  onReorder,
+  onAdd,
+  onDelete,
+  onDuplicate,
+  tab,
+  onTab,
+  onOpenCommonLayout,
+  onOpenAnimation,
+  onOpenSlideMode,
+}: ListPanelProps) {
   const dragFrom = useRef<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
+  // 더보기(…) 메뉴가 열린 줄과 버튼 위치(화면 좌표)
+  const [menu, setMenu] = useState<{ index: number; anchor: DOMRect } | null>(null);
 
   const handleDrop = (event: DragEvent, to: number) => {
     event.preventDefault();
@@ -1612,7 +1759,21 @@ function SlideListPanel({ slides, maxSlides, onOpen, onReorder, onAdd, tab, onTa
       {tab === 'common' && (
         <CommonSettings count={slides.length} onOpenLayout={onOpenCommonLayout} onOpenAnimation={onOpenAnimation} onOpenSlideMode={onOpenSlideMode} />
       )}
-      {tab === 'content' && (
+      {/* 아이템을 모두 지웠을 때 (피그마: 탭은 그대로, 콘텐츠 영역만 비어 있음) */}
+      {tab === 'content' && slides.length === 0 && (
+        <div className="flex h-[268px] w-[280px] flex-col items-center justify-center gap-[20px] p-[20px]">
+          <p className="w-full text-center font-['Pretendard'] text-[12px] leading-[18px] font-normal text-[#667080]">아이템을 추가해 주세요</p>
+          <button
+            type="button"
+            onClick={onAdd}
+            className={`flex h-[32px] cursor-pointer items-center justify-center gap-[4px] rounded-[8px] border border-solid border-[rgba(51,62,76,0.16)] py-[7px] pr-[13px] pl-[9px] ${HOVER_LAYER}`}
+          >
+            <img src={iconPlus} alt="" width={16} height={16} />
+            <span className="font-['Pretendard'] text-[12px] leading-[18px] font-medium whitespace-nowrap text-black">아이템 추가</span>
+          </button>
+        </div>
+      )}
+      {tab === 'content' && slides.length > 0 && (
         <div className="flex min-h-0 w-[280px] flex-1 flex-col gap-[12px] pt-[20px] pb-px">
           <div className="flex h-[18px] shrink-0 items-baseline gap-[4px] px-[20px] font-['Pretendard'] text-[12px] leading-[18px] whitespace-nowrap">
             <span className="font-semibold text-[#333e4c]">아이템</span>
@@ -1664,7 +1825,22 @@ function SlideListPanel({ slides, maxSlides, onOpen, onReorder, onAdd, tab, onTa
                     {/* 제목이 없거나(구성 요소에서 지움) 비어 있으면 '(슬라이드 N)' */}
                     {(slide.visible.title && slide.title) || `(슬라이드 ${index + 1})`}
                   </p>
-                  <img src={iconChevronRightEdge} alt="" width={16} height={16} />
+                  {/* hover 시 더보기(…) 버튼 → 복제·삭제 메뉴. 메뉴가 열린 줄은 계속 보임 */}
+                  <button
+                    type="button"
+                    aria-label={`슬라이드 ${index + 1} 더보기`}
+                    draggable={false}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      const anchor = event.currentTarget.getBoundingClientRect();
+                      setMenu((prev) => (prev?.index === index ? null : { index, anchor }));
+                    }}
+                    className={`flex size-[24px] shrink-0 cursor-pointer items-center justify-center rounded-[4px] hover:bg-[rgba(24,29,37,0.04)] ${
+                      menu?.index === index ? 'bg-[rgba(24,29,37,0.04)] opacity-100' : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                  >
+                    <img src={iconOverflowRow} alt="" width={16} height={16} />
+                  </button>
                 </div>
                 {/* hover 시 순서 변경 아이콘 */}
                 <img
@@ -1688,7 +1864,91 @@ function SlideListPanel({ slides, maxSlides, onOpen, onReorder, onAdd, tab, onTa
           </div>
         </div>
       )}
+      {menu && (
+        <SlideItemMenu
+          anchor={menu.anchor}
+          canDuplicate={slides.length < maxSlides}
+          canDelete
+          onDuplicate={() => onDuplicate(menu.index)}
+          onDelete={() => onDelete(menu.index)}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// 슬라이드 목록 줄의 더보기 메뉴 (피그마 menu: 복제 / 삭제)
+// 패널·목록이 잘라내지 않도록 화면 맨 위 레이어에 그림. 버튼 오른쪽 끝에 맞춰 바로 아래
+function SlideItemMenu({
+  anchor,
+  canDuplicate,
+  canDelete,
+  onDuplicate,
+  onDelete,
+  onClose,
+}: {
+  anchor: DOMRect;
+  canDuplicate: boolean;
+  canDelete: boolean;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  // 메뉴 바깥을 누르거나 Esc → 닫힘
+  useEffect(() => {
+    const handleDown = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) onClose();
+    };
+    const handleKey = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
+    // 메뉴를 연 클릭이 바로 닫지 않도록 다음 틱부터
+    const timer = window.setTimeout(() => document.addEventListener('mousedown', handleDown));
+    window.addEventListener('keydown', handleKey);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('mousedown', handleDown);
+      window.removeEventListener('keydown', handleKey);
+    };
+  }, [onClose]);
+
+  const layer = document.getElementById(CURSOR_LAYER_ID);
+  if (!layer) return null;
+  const rect = layer.getBoundingClientRect();
+  const scale = rect.width / layer.offsetWidth || 1;
+
+  const item = (icon: string, label: string, enabled: boolean, onClick: () => void, danger = false) => (
+    <button
+      type="button"
+      disabled={!enabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+        onClose();
+      }}
+      className={`flex h-[38px] w-full items-center gap-[8px] px-[12px] py-[10px] text-left ${enabled ? `cursor-pointer ${HOVER_LAYER}` : 'cursor-default opacity-40'}`}
+    >
+      <img src={icon} alt="" width={18} height={18} />
+      <span className={`min-w-px flex-1 truncate font-['Pretendard'] text-[12px] leading-[18px] font-normal ${danger ? 'text-[#e5261c]' : 'text-black'}`}>
+        {label}
+      </span>
+    </button>
+  );
+
+  return createPortal(
+    <div
+      ref={ref}
+      className="pointer-events-auto absolute flex w-[160px] flex-col overflow-hidden rounded-[8px] border border-solid border-[rgba(51,62,76,0.1)] bg-white px-px py-[11px] shadow-[0px_0px_1px_0px_rgba(65,78,97,0.08),0px_16px_64px_0px_rgba(65,78,97,0.16)]"
+      style={{
+        left: (anchor.right - rect.left) / scale - 160,
+        top: (anchor.bottom - rect.top) / scale + 4,
+      }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {item(iconCopy, '복제', canDuplicate, onDuplicate)}
+      {item(iconDeleteMenu, '삭제', canDelete, onDelete, true)}
+    </div>,
+    layer,
   );
 }
 
@@ -1887,7 +2147,7 @@ function CommonLayoutPanel({
   // 패널이 닫히면 미리보기도 끝냄
   useEffect(() => () => onPeek(null), [onPeek]);
   // 모든 슬라이드가 같은 레이아웃이고, 보고 있는 비율이 적용된 비율일 때만 선택 표시
-  const sharedLayout = slides.every((slide) => slide.layout[device] === slides[0].layout[device]) ? slides[0].layout[device] : null;
+  const sharedLayout = slides.length > 0 && slides.every((slide) => slide.layout[device] === slides[0].layout[device]) ? slides[0].layout[device] : null;
   const selectedLayout = viewRatio[device] === ratio[device] ? sharedLayout : null;
   const height = previewHeight(device, viewRatio[device]);
   return (
@@ -1990,11 +2250,13 @@ function SlideModePanel({ value, onChange, onBack }: { value: SlideMode; onChang
 // 있는 요소: 누르면 캔버스에서 선택 + 요소 패널 / 없는(지운) 요소: 파란 '{이름} 추가' → 누르면 다시 표시
 function ComponentsPanel({
   slide,
+  slideLabel,
   onBack,
   onSelect,
   onAdd,
 }: {
   slide: Slide;
+  slideLabel: string;
   onBack: () => void;
   onSelect: (target: ElementKey) => void;
   onAdd: (target: ElementKey) => void;
@@ -2020,7 +2282,7 @@ function ComponentsPanel({
   };
   return (
     <div className={PANEL_CLASS}>
-      <PanelHeader title="구성 요소" onBack={onBack} />
+      <PanelHeader title="구성 요소" subtitle={slideLabel} onBack={onBack} />
       <div className="flex w-full flex-col border-b border-solid border-[rgba(51,62,76,0.1)] pb-[8px]">
         {groupTitle('텍스트')}
         <div className="flex w-full flex-col px-[8px]">
@@ -2041,31 +2303,17 @@ function SlideDetailPanel({
   index,
   slide,
   onBack,
-  onDelete,
   onOpenMenu,
 }: {
   index: number;
   slide: Slide;
   onBack: () => void;
-  onDelete: () => void;
   onOpenMenu: (menu: 'background' | 'color' | 'components') => void;
 }) {
   return (
     <div className={PANEL_CLASS}>
-      <PanelHeader
-        title={`슬라이드 ${index + 1}`}
-        onBack={onBack}
-        right={
-          <button
-            type="button"
-            aria-label="슬라이드 삭제"
-            onClick={onDelete}
-            className={`flex size-[24px] cursor-pointer items-center justify-center rounded-[4px] ${HOVER_LAYER}`}
-          >
-            <img src={iconDeleteSlide} alt="" width={16} height={16} />
-          </button>
-        }
-      />
+      {/* 슬라이드 삭제는 '슬라이드' 목록의 더보기(…) 메뉴에서 */}
+      <PanelHeader title={`슬라이드 ${index + 1}`} onBack={onBack} />
       <div className="flex w-[280px] flex-col items-center gap-[8px] px-[16px] pt-[8px] pb-[16px]">
         {/* 배경: 실제 배경 이미지를 썸네일로 보여줌 (없으면 아이콘) */}
         <MenuItem icon={iconImage} label="배경" thumbnail={slide.image} onClick={() => onOpenMenu('background')} />
@@ -2130,7 +2378,18 @@ function TextButton({ label, onClick }: { label: string; onClick?: () => void })
   );
 }
 
-function BackgroundPanel({ slide, onBack, onChange }: { slide: Slide; onBack: () => void; onChange: (patch: Partial<Slide>) => void }) {
+// slideLabel: 헤더에 지금 보고 있는 슬라이드 표시 (예: '슬라이드 1')
+function BackgroundPanel({
+  slide,
+  slideLabel,
+  onBack,
+  onChange,
+}: {
+  slide: Slide;
+  slideLabel: string;
+  onBack: () => void;
+  onChange: (patch: Partial<Slide>) => void;
+}) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
@@ -2148,7 +2407,7 @@ function BackgroundPanel({ slide, onBack, onChange }: { slide: Slide; onBack: ()
   return (
     // 색상 메뉴가 패널 아래로 조금 나올 수 있어서 overflow-hidden 없는 패널 사용
     <div className={ELEMENT_PANEL_CLASS}>
-      <PanelHeader title="배경" onBack={onBack} />
+      <PanelHeader title="배경" subtitle={slideLabel} onBack={onBack} />
 
       <div className="flex w-[280px] flex-col gap-[12px] border-b border-solid border-[rgba(51,62,76,0.1)] px-[20px] pt-[5px] pb-[20px]">
         <div className="flex w-full flex-col gap-[9px]">
@@ -2312,20 +2571,71 @@ function SchemeOptionCard({
   );
 }
 
-function ColorPanel({ slide, onBack, onChange }: { slide: Slide; onBack: () => void; onChange: (patch: Partial<Slide>) => void }) {
+// 색상 패널 (피그마 panel/color)
+// - Scheme: 섹션 배경색 (흰색 / 연회색 / 검정). 바꾸면 배경색만 바뀜
+// - on-media(글자·버튼색): 밝은 색상 / 어두운 색상
+// showScheme: 인트로 섹션은 Scheme(배경색) 없이 on-media만
+function ColorPanel({
+  slide,
+  slideLabel,
+  showScheme,
+  onBack,
+  onChange,
+}: {
+  slide: Slide;
+  slideLabel: string;
+  showScheme: boolean;
+  onBack: () => void;
+  onChange: (patch: Partial<Slide>) => void;
+}) {
+  const sectionTitle = (title: string) => <p className="w-full font-['Pretendard'] text-[12px] leading-[18px] font-semibold text-[#333e4c]">{title}</p>;
   return (
     <div className={PANEL_CLASS}>
-      <PanelHeader title="색상" onBack={onBack} />
-      <div className="flex w-full flex-col gap-[20px] px-[20px] pt-[8px] pb-[20px]">
-        <div className="flex w-[240px] flex-col gap-[8px]">
-          {SCHEME_OPTIONS.map((option) => (
-            <SchemeOptionCard
-              key={option.value}
-              option={option}
-              isSelected={slide.scheme === option.value}
-              onClick={() => onChange({ scheme: option.value })}
-            />
-          ))}
+      <PanelHeader title="색상" subtitle={slideLabel} onBack={onBack} />
+      {showScheme && (
+        <div className="flex w-full flex-col gap-[12px] border-b border-solid border-[rgba(51,62,76,0.1)] px-[20px] pt-[8px] pb-[21px]">
+          {sectionTitle('Scheme')}
+          <div className="flex w-[240px] flex-col gap-[8px]">
+            {BACKGROUND_OPTIONS.map((option) => {
+              const isSelected = slide.background === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onChange({ background: option.value })}
+                  className={`flex w-full cursor-pointer flex-col rounded-[6px] p-[2px] text-left ${isSelected ? 'border-[1.5px] border-solid border-[#1a66ff]' : ''}`}
+                >
+                  <span
+                    className="flex w-full items-center overflow-hidden rounded-[6px] border border-solid border-[rgba(51,62,76,0.16)] px-[12px] py-[13px]"
+                    style={{ background: option.color }}
+                  >
+                    <span className="flex items-center gap-[6px]">
+                      <span className="size-[16px] shrink-0 rounded-[100px]" style={{ background: option.chip }} />
+                      <span className="font-['Pretendard'] text-[12px] leading-[18px] font-medium whitespace-nowrap" style={{ color: option.text }}>
+                        Aa
+                      </span>
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      <div className={`flex w-full flex-col gap-[20px] px-[20px] pb-[20px] ${showScheme ? 'pt-[20px]' : 'pt-[8px]'}`}>
+        <div className="flex w-full flex-col gap-[12px]">
+          {sectionTitle('on-media')}
+          <div className="flex w-[240px] flex-col gap-[8px]">
+            {SCHEME_OPTIONS.map((option) => (
+              <SchemeOptionCard
+                key={option.value}
+                option={option}
+                isSelected={slide.scheme === option.value}
+                lightDim={0.6}
+                onClick={() => onChange({ scheme: option.value })}
+              />
+            ))}
+          </div>
         </div>
         <p className="w-full font-['Pretendard'] text-[11px] leading-[14px] font-normal text-[#667080]">
           {'{Color Scheme}은 '}
@@ -3122,6 +3432,9 @@ function ButtonPanel({
 
 // ---------------------------------------------------------------- 화면
 
+// 특정 슬라이드(슬라이드 N)를 다루는 패널. 이 패널들이 떠 있을 때만 슬라이드 간격 핸들을 보여 줌
+const SLIDE_PANELS: PanelView[] = ['detail', 'background', 'color', 'components'];
+
 type PanelView = 'list' | 'detail' | 'background' | 'color' | 'common-layout' | 'animation' | 'slide-mode' | 'components';
 
 // 섹션마다 따로 갖는 슬라이드 목록·보고 있는 슬라이드·공통 설정
@@ -3160,7 +3473,11 @@ export function CarouselScreenV3() {
   // 캔버스에서 글자를 고치는 중인 텍스트(데스크탑·모바일 중 클릭한 쪽)
   const [editing, setEditing] = useState<EditingText>(null);
 
-  const activeSlide = slides[activeIndex];
+  // 아이템을 모두 지운 섹션: 캔버스엔 견본 슬라이드, 패널엔 빈 상태
+  const isEmpty = slides.length === 0;
+  const activeSlide = slides[activeIndex] ?? PLACEHOLDER_SLIDE[activeSection];
+  // 배경·색상·구성 요소 패널 헤더에 붙이는 '슬라이드 N' (지금 보고 있는 순서)
+  const slideLabel = `슬라이드 ${activeIndex + 1}`;
   // 공통 설정 > 레이아웃 미리보기에 마우스를 올린 동안 캔버스에만 잠깐 보여줄 비율·레이아웃
   const [peek, setPeek] = useState<LayoutPeek | null>(null);
   const canvasDesign = peek ? { ...design, ratio: { ...design.ratio, [peek.device]: peek.ratio } } : design;
@@ -3186,13 +3503,7 @@ export function CarouselScreenV3() {
       next.splice(to, 0, moved);
       return next;
     });
-    // 보고 있던 슬라이드를 계속 따라감
-    setActiveIndex((current) => {
-      if (current === from) return to;
-      if (from < current && to >= current) return current - 1;
-      if (from > current && to <= current) return current + 1;
-      return current;
-    });
+    // 보고 있던 '순서'(activeIndex)는 그대로 → 캔버스엔 그 순서로 옮겨 온 슬라이드가 보임
   };
 
   const addSlide = () => {
@@ -3205,12 +3516,18 @@ export function CarouselScreenV3() {
     setPanel('detail');
   };
 
-  const deleteActive = () => {
-    if (slides.length <= 1) return;
-    setSlides((prev) => prev.filter((_, index) => index !== activeIndex));
+  // 목록에서 슬라이드 삭제. 보고 있던 순서는 그대로 두고, 끝을 넘으면 마지막 슬라이드로
+  // 마지막 하나까지 지울 수 있음 → 빈 상태(패널 '아이템을 추가해 주세요', 캔버스 견본)
+  const deleteAt = (target: number) => {
+    setSlides((prev) => prev.filter((_, index) => index !== target));
     setActiveIndex((current) => Math.max(0, Math.min(current, slides.length - 2)));
-    setPanel('list');
-    setSelected('section');
+  };
+
+  // 목록에서 슬라이드 복제: 바로 아래에 같은 내용으로 추가 (최대 개수까지). 보고 있던 순서는 그대로
+  const duplicateAt = (target: number) => {
+    if (slides.length >= MAX_SLIDES[activeSection]) return;
+    const nextId = Math.max(0, ...slides.map((slide) => slide.id)) + 1;
+    setSlides((prev) => [...prev.slice(0, target + 1), { ...prev[target], id: nextId }, ...prev.slice(target + 1)]);
   };
 
   // 텍스트 패널의 '공통 스타일' 기본 글자색 (히어로는 색상 규칙이 다름)
@@ -3256,7 +3573,7 @@ export function CarouselScreenV3() {
   const handleSelect = (next: Selected) => {
     finishEditing();
     // '슬라이드' 목록 패널이 떠 있는 상태에서 슬라이드를 한 번 더 누르면 그 슬라이드 패널(슬라이드 N)로 이동
-    if (next === 'section' && selected === 'section' && panel === 'list') setPanel('detail');
+    if (next === 'section' && selected === 'section' && panel === 'list' && !isEmpty) setPanel('detail');
     setSelected(next);
     // 선택을 해제하면 다음에 슬라이드를 다시 눌렀을 때 '슬라이드' 목록 패널부터 보여줌
     if (next === 'none') setPanel('list');
@@ -3274,27 +3591,34 @@ export function CarouselScreenV3() {
   const canvasSection = (id: SectionId): CanvasSection => {
     const state = sections[id];
     const isActive = id === activeSection;
+    // 빈 섹션: 견본 슬라이드. 요소를 눌러도 슬라이드(섹션) 선택만 됨
+    const empty = state.slides.length === 0;
+    const toSection = (next: Selected) => (empty && next !== 'none' ? 'section' : next);
     return {
       id,
       isActive,
-      slide: isActive ? canvasSlide : state.slides[state.activeIndex],
-      index: state.activeIndex,
-      count: state.slides.length,
+      slide: isActive ? canvasSlide : (state.slides[state.activeIndex] ?? PLACEHOLDER_SLIDE[id]),
+      index: empty ? 0 : state.activeIndex,
+      count: empty ? PLACEHOLDER_COUNT[id] : state.slides.length,
       design: isActive ? canvasDesign : state.design,
       selected: isActive ? selected : 'none',
-      editing: isActive ? editing : null,
+      showSpacing: isActive && !empty && SLIDE_PANELS.includes(panel),
+      editing: isActive && !empty ? editing : null,
       thumbnails: state.slides.map((slide) => slide.image),
       dimDevice: isActive ? (peek?.device ?? null) : null,
       // 이전/다음: 끝에서 넘기면 반대쪽 끝으로. 열려 있던 패널(목록·상세·배경 등)은 그대로 두고 보는 슬라이드만 바뀜
-      onStep: (step) => setActiveIndex((current) => (current + step + slides.length) % slides.length),
-      onSelect: (next) => (isActive ? handleSelect(next) : enterSection(id, next)),
+      onStep: (step) => !empty && setActiveIndex((current) => (current + step + slides.length) % slides.length),
+      onSelect: (next) => (isActive ? handleSelect(toSection(next)) : enterSection(id, toSection(next))),
       onSpacingChange: updateSpacing,
       onSpacingStart: () => {
         // 간격을 조절하면 그 슬라이드의 패널(슬라이드 N)을 띄움
         setSelected('section');
         setPanel('detail');
       },
-      onTextClick: (kind, device) => (isActive ? handleTextClick(kind, device) : enterSection(id, kind)),
+      onTextClick: (kind, device) => {
+        if (empty) return isActive ? handleSelect('section') : enterSection(id, 'section');
+        return isActive ? handleTextClick(kind, device) : enterSection(id, kind);
+      },
       onTextDone: handleTextDone,
     };
   };
@@ -3306,12 +3630,14 @@ export function CarouselScreenV3() {
 
       {selected === 'section' && (
         <>
-          {panel === 'list' && (
+          {(panel === 'list' || (isEmpty && SLIDE_PANELS.includes(panel))) && (
             <SlideListPanel
               slides={slides}
               maxSlides={MAX_SLIDES[activeSection]}
               onReorder={reorder}
               onAdd={addSlide}
+              onDelete={deleteAt}
+              onDuplicate={duplicateAt}
               tab={listTab}
               onTab={setListTab}
               onOpenCommonLayout={() => setPanel('common-layout')}
@@ -3323,18 +3649,13 @@ export function CarouselScreenV3() {
               }}
             />
           )}
-          {panel === 'detail' && (
-            <SlideDetailPanel
-              index={activeIndex}
-              slide={activeSlide}
-              onBack={() => setPanel('list')}
-              onDelete={deleteActive}
-              onOpenMenu={(menu) => setPanel(menu)}
-            />
+          {panel === 'detail' && !isEmpty && (
+            <SlideDetailPanel index={activeIndex} slide={activeSlide} onBack={() => setPanel('list')} onOpenMenu={(menu) => setPanel(menu)} />
           )}
-          {panel === 'components' && (
+          {!isEmpty && panel === 'components' && (
             <ComponentsPanel
               slide={activeSlide}
+              slideLabel={slideLabel}
               onBack={() => setPanel('detail')}
               onSelect={(target) => {
                 setSelected(target);
@@ -3344,8 +3665,18 @@ export function CarouselScreenV3() {
               onAdd={(target) => updateActive({ visible: { ...activeSlide.visible, [target]: true } })}
             />
           )}
-          {panel === 'background' && <BackgroundPanel slide={activeSlide} onBack={() => setPanel('detail')} onChange={updateActive} />}
-          {panel === 'color' && <ColorPanel slide={activeSlide} onBack={() => setPanel('detail')} onChange={updateActive} />}
+          {!isEmpty && panel === 'background' && (
+            <BackgroundPanel slide={activeSlide} slideLabel={slideLabel} onBack={() => setPanel('detail')} onChange={updateActive} />
+          )}
+          {!isEmpty && panel === 'color' && (
+            <ColorPanel
+              slide={activeSlide}
+              slideLabel={slideLabel}
+              showScheme={activeSection === 'hero'}
+              onBack={() => setPanel('detail')}
+              onChange={updateActive}
+            />
+          )}
           {panel === 'slide-mode' && (
             <SlideModePanel value={design.slideMode} onChange={(slideMode) => updateDesign({ slideMode })} onBack={() => setPanel('list')} />
           )}
