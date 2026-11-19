@@ -23,6 +23,7 @@ import iconReorderDot from '../assets/figma/carousel/reorder-dot.svg';
 import iconBack from '../assets/figma/carousel/back.svg';
 import iconImage from '../assets/figma/carousel/image.svg';
 import iconLayer from '../assets/figma/carousel/layer.svg';
+import iconPalette from '../assets/figma/carousel/palette.svg';
 import iconSync from '../assets/figma/carousel/sync.svg';
 import iconFocalPoint from '../assets/figma/carousel/focal-point.svg';
 import iconDelete from '../assets/figma/carousel/delete.svg';
@@ -41,7 +42,6 @@ import iconTypography from '../assets/figma/carousel/typography.svg';
 import iconLink from '../assets/figma/carousel/link.svg';
 import iconTooltipTip from '../assets/figma/carousel/tooltip-tip.svg';
 import imgOpacityTrack from '../assets/figma/carousel/opacity-track.png';
-import iconButtonStyleAa from '../assets/figma/carousel/button-style-aa.svg';
 import iconDirectionRow from '../assets/figma/carousel/direction-row.svg';
 import iconDirectionColumn from '../assets/figma/carousel/direction-column.svg';
 import iconChevronDownPanel from '../assets/figma/text-color/chevron-down-panel.svg';
@@ -68,14 +68,17 @@ import heroImage3 from '../assets/figma/carousel/hero/hero-3.jpg';
 import heroImage4 from '../assets/figma/carousel/slide-red.jpg';
 import iconVerpanArrow from '../assets/figma/carousel/hero/verpan-arrow.svg';
 import iconPreviewArrow from '../assets/figma/carousel/hero/preview-arrow.svg';
+import galleryImage1 from '../assets/figma/carousel/slide-lemon.png';
+import galleryImage1Mobile from '../assets/figma/carousel/gallery/g-1-mobile.png';
+import iconGalleryArrow from '../assets/figma/carousel/gallery/arrow.svg';
 
 // 브라우저 크롬(browser/desktop, 88px)을 제외한 편집 영역 크기
 export const CAROUSEL_SCREEN_WIDTH = 1512;
 export const CAROUSEL_SCREEN_HEIGHT = 894;
 
 const DM_SANS: CSSProperties = { fontVariationSettings: '"opsz" 14' };
-// 섹션별 최대 슬라이드(아이템) 개수: 인트로 10개, 히어로 4개
-const MAX_SLIDES: Record<'intro' | 'hero', number> = { intro: 10, hero: 4 };
+// 섹션별 최대 슬라이드(아이템) 개수: 인트로 10개, 히어로 4개, 이미지 캐러셀 10개
+const MAX_SLIDES: Record<'intro' | 'hero' | 'gallery', number> = { intro: 10, hero: 4, gallery: 10 };
 
 // ---------------------------------------------------------------- 데이터
 
@@ -249,8 +252,9 @@ function makeEmptySlide(id: number): Slide {
 // 인트로 아래에 붙는 섹션. 같은 슬라이드 편집 경험(목록·상세·요소 선택·간격)을 그대로 씀
 
 // intro = 기존 인트로 캐러셀 / hero = 카드형 히어로 캐러셀
-type SectionId = 'intro' | 'hero';
-const SECTION_IDS: SectionId[] = ['intro', 'hero'];
+// gallery = 이미지만 있는 캐러셀 (피그마 3342:306362)
+type SectionId = 'intro' | 'hero' | 'gallery';
+const SECTION_IDS: SectionId[] = ['intro', 'hero', 'gallery'];
 
 const HERO_DESCRIPTION = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Graecis praetorem, consuetudinum, maiores, tribus saluti reprehensa.';
 
@@ -303,6 +307,22 @@ const HERO_SLIDES: Slide[] = HERO_CONTENTS.map(({ noTitle, ...content }, index) 
   return noTitle ? { ...slide, visible: { ...slide.visible, title: false } } : slide;
 });
 
+// ---------------------------------------------------------------- 세 번째 섹션: 이미지 캐러셀 (피그마 3342:306362)
+// 글·버튼 없이 이미지만. 이미지는 '배경' 패널에서 올리고 바꿈. 오버레이는 시안대로 20%
+const GALLERY_IMAGES: { image: string; mobileImage?: string }[] = [
+  { image: galleryImage1, mobileImage: galleryImage1Mobile },
+  { image: heroImage2 },
+  { image: heroImage3 },
+  { image: heroImage4 },
+];
+
+function makeGallerySlide(id: number, { image, mobileImage }: { image: string | null; mobileImage?: string }): Slide {
+  const slide = makeSlide(id, { title: '', description: '', buttons: [], image, mobileImage });
+  return { ...slide, overlay: 20, visible: { overline: false, title: false, description: false, buttons: false } };
+}
+
+const GALLERY_SLIDES: Slide[] = GALLERY_IMAGES.map((content, index) => makeGallerySlide(201 + index, content));
+
 // ---------------------------------------------------------------- 아이템을 모두 지웠을 때 캔버스에 보여 줄 견본 (피그마 3367:649078)
 // 편집할 수 없는 자리 표시용 슬라이드. 배경 없음(회색) + 시안 기본 문구
 const PLACEHOLDER_SLIDE: Record<SectionId, Slide> = {
@@ -316,9 +336,10 @@ const PLACEHOLDER_SLIDE: Record<SectionId, Slide> = {
     return { ...slide, overline: 'Lorem ipsum', overlineStyle: '캡션 1', visible: { ...slide.visible, overline: true } };
   })(),
   hero: makeHeroSlide(0, { title: 'Lorem ipsum dolor', image: null }),
+  gallery: makeGallerySlide(0, { image: null }),
 };
 // 견본의 인디케이터 개수 (인트로 시안 5개, 히어로는 썸네일 4칸)
-const PLACEHOLDER_COUNT: Record<SectionId, number> = { intro: 5, hero: 4 };
+const PLACEHOLDER_COUNT: Record<SectionId, number> = { intro: 5, hero: 4, gallery: 5 };
 
 // 한글은 DM Sans에 없으므로 Pretendard로 표시
 const SITE_FONT = "font-['DM_Sans',_'Pretendard']";
@@ -575,8 +596,14 @@ const HERO_BOX: Record<Device, { width: number; fullHeight: number }> = {
   mobile: { width: 188, fullHeight: 406.851 },
 };
 
+// 이미지 캐러셀 풀스크린 = 피그마 시안 크기 (모바일은 381.74로 조금 짧음)
+const GALLERY_BOX: Record<Device, { width: number; fullHeight: number }> = {
+  desktop: { width: 920, fullHeight: 517.5 },
+  mobile: { width: 188, fullHeight: 381.74 },
+};
+
 function slideHeight(device: Device, ratio: string, section: SectionId = 'intro') {
-  const box = (section === 'hero' ? HERO_BOX : SLIDE_BOX)[device];
+  const box = (section === 'hero' ? HERO_BOX : section === 'gallery' ? GALLERY_BOX : SLIDE_BOX)[device];
   const value = ratioValue(device, ratio);
   return value === null ? box.fullHeight : box.width / value;
 }
@@ -1517,13 +1544,74 @@ function SlideFrame({ className, style, onStep }: { className: string; style?: C
   );
 }
 
+// 이미지 캐러셀 슬라이드: 이미지 + 오버레이 + 아래 인디케이터 (+ 데스크탑 좌우 화살표)
+// 어디를 눌러도 슬라이드 선택. 이미지가 없으면 회색
+function GallerySlideView({ slide, index, count, device, onSelect }: SlideViewProps) {
+  const metrics = METRICS[device];
+  const isDesktop = device === 'desktop';
+  const colors = schemeColors(slide.scheme);
+  const image = slide.image && (isDesktop ? slide.image : (slide.mobileImage ?? slide.image));
+  return (
+    <div
+      className="absolute inset-0 overflow-hidden"
+      style={{ background: backgroundColor(slide.background) }}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect('section');
+      }}
+    >
+      {image ? (
+        <img
+          src={image}
+          alt=""
+          className="absolute inset-0 size-full max-w-none object-cover"
+          style={{ objectPosition: isDesktop ? slide.imagePosition : (slide.mobileImagePosition ?? slide.imagePosition) }}
+        />
+      ) : (
+        <div className="absolute inset-0 bg-[rgba(0,0,0,0.25)]" />
+      )}
+      <div className="absolute inset-0 bg-black" style={{ opacity: slide.overlay / 100 }} />
+      <div
+        className="pointer-events-none absolute bottom-0 left-0 flex w-full items-center justify-center"
+        style={{ height: metrics.indicatorHeight, padding: metrics.indicatorPad }}
+      >
+        <div className="flex max-w-full items-start" style={{ gap: metrics.barGap, padding: metrics.barPad }}>
+          {Array.from({ length: count }, (_, barIndex) => (
+            <span
+              key={barIndex}
+              className="min-w-[4px] shrink rounded-[0.479px] transition-opacity duration-200"
+              style={{ width: metrics.bar[0], height: metrics.bar[1], background: colors.line, opacity: barIndex === index ? 1 : 0.4 }}
+            />
+          ))}
+        </div>
+      </div>
+      {isDesktop && (
+        <div className="pointer-events-none absolute top-1/2 left-0 flex w-full -translate-y-1/2 items-center justify-between px-[13.417px]">
+          <span className="flex size-[19.167px] items-center justify-center">
+            <img src={iconGalleryArrow} alt="" width={11.5} height={11.5} style={{ filter: colors.arrow }} />
+          </span>
+          <span className="flex size-[19.167px] items-center justify-center">
+            <img src={iconGalleryArrow} alt="" width={11.5} height={11.5} className="rotate-180" style={{ filter: colors.arrow }} />
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SectionView({ section, device }: { section: CanvasSection; device: Device }) {
   const { id, isActive, thumbnails, dimDevice, onStep, ...props } = section;
   const height = slideHeight(device, props.design.ratio[device], id);
   const isSection = isActive && props.selected === 'section';
   return (
     <div className="relative w-full shrink-0" style={{ height }}>
-      {id === 'hero' ? <HeroSlideView {...props} device={device} thumbnails={thumbnails} /> : <SlideView {...props} device={device} />}
+      {id === 'hero' ? (
+        <HeroSlideView {...props} device={device} thumbnails={thumbnails} />
+      ) : id === 'gallery' ? (
+        <GallerySlideView {...props} device={device} />
+      ) : (
+        <SlideView {...props} device={device} />
+      )}
       {dimDevice === device && <div className="pointer-events-none absolute inset-0 bg-[rgba(255,255,255,0.4)]" />}
       {isSection && (
         <div className={`pointer-events-none absolute inset-0 border border-solid ${device === 'desktop' ? 'border-[#09f]' : 'border-[#80ccff]'}`} />
@@ -1642,6 +1730,8 @@ function MenuItem({
 // ---------------------------------------------------------------- 1. 슬라이드 목록 패널
 
 type ListPanelProps = {
+  // imageOnly: 이미지 캐러셀. 제목이 없으므로 목록 이름을 '슬라이드 N'(검은 글자)로
+  imageOnly?: boolean;
   slides: Slide[];
   maxSlides: number;
   onOpen: (index: number) => void;
@@ -1712,6 +1802,7 @@ function CommonSettings({
 }
 
 function SlideListPanel({
+  imageOnly = false,
   slides,
   maxSlides,
   onOpen,
@@ -1819,11 +1910,11 @@ function SlideListPanel({
                   </div>
                   <p
                     className={`min-w-px flex-1 truncate font-['Pretendard'] text-[12px] leading-[18px] font-normal ${
-                      slide.visible.title && slide.title ? 'text-black' : 'text-[#99a0aa]'
+                      imageOnly || (slide.visible.title && slide.title) ? 'text-black' : 'text-[#99a0aa]'
                     }`}
                   >
                     {/* 제목이 없거나(구성 요소에서 지움) 비어 있으면 '(슬라이드 N)' */}
-                    {(slide.visible.title && slide.title) || `(슬라이드 ${index + 1})`}
+                    {imageOnly ? `슬라이드 ${index + 1}` : (slide.visible.title && slide.title) || `(슬라이드 ${index + 1})`}
                   </p>
                   {/* hover 시 더보기(…) 버튼 → 복제·삭제 메뉴. 메뉴가 열린 줄은 계속 보임 */}
                   <button
@@ -2104,6 +2195,26 @@ function HeroMobileLayoutPreview({ height = 233.723 }: { height?: number }) {
   );
 }
 
+// 이미지 캐러셀 레이아웃 미리보기: 이미지 자리(회색) + 인디케이터 (+ 데스크탑 화살표). 글 위치가 없어 비율만 바뀜
+function GalleryLayoutPreview({ device, height }: { device: Device; height: number }) {
+  const isDesktop = device === 'desktop';
+  return (
+    <div className={`relative overflow-hidden bg-[rgba(0,0,0,0.2)] ${isDesktop ? 'w-[236px]' : 'w-[108px]'}`} style={{ height }}>
+      <div className="absolute bottom-[3px] left-1/2 flex -translate-x-1/2 gap-[1px]">
+        {[0, 1, 2, 3, 4].map((bar) => (
+          <span key={bar} className={`h-[0.5px] w-[4.4px] rounded-[0.25px] bg-white ${bar === 0 ? '' : 'opacity-40'}`} />
+        ))}
+      </div>
+      {isDesktop && (
+        <div className="absolute top-1/2 left-0 flex w-full -translate-y-1/2 items-center justify-between px-[3.4px]">
+          <img src={iconPreviewArrow} alt="" width={2.925} height={2.925} className="-scale-y-100" />
+          <img src={iconPreviewArrow} alt="" width={2.925} height={2.925} className="rotate-180" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // 미리보기 크기: 너비는 고정, 높이는 비율에 맞춤 (풀스크린 = 피그마 시안 높이)
 const PREVIEW_BOX: Record<Device, { width: number; fullHeight: number }> = {
   desktop: { width: 236, fullHeight: 132.75 },
@@ -2183,7 +2294,7 @@ function CommonLayoutPanel({
         className={`flex w-full gap-[12px] p-[20px] ${device === 'desktop' ? 'flex-col' : 'flex-wrap content-start items-start'}`}
         onMouseLeave={() => onPeek(null)}
       >
-        {(section === 'hero' ? HERO_LAYOUT_OPTIONS : device === 'desktop' ? LAYOUT_OPTIONS : MOBILE_LAYOUT_OPTIONS).map((option) => (
+        {(section !== 'intro' ? HERO_LAYOUT_OPTIONS : device === 'desktop' ? LAYOUT_OPTIONS : MOBILE_LAYOUT_OPTIONS).map((option) => (
           <button
             key={option}
             type="button"
@@ -2194,7 +2305,9 @@ function CommonLayoutPanel({
             }`}
           >
             <span className="flex w-full overflow-hidden rounded-[6px] border border-solid border-[rgba(51,62,76,0.16)] bg-white p-px">
-              {section === 'hero' ? (
+              {section === 'gallery' ? (
+                <GalleryLayoutPreview device={device} height={height} />
+              ) : section === 'hero' ? (
                 device === 'desktop' ? (
                   <HeroLayoutPreview height={height} />
                 ) : (
@@ -2300,11 +2413,13 @@ function ComponentsPanel({
 // ---------------------------------------------------------------- 2. 슬라이드 상세 패널
 
 function SlideDetailPanel({
+  imageOnly = false,
   index,
   slide,
   onBack,
   onOpenMenu,
 }: {
+  imageOnly?: boolean;
   index: number;
   slide: Slide;
   onBack: () => void;
@@ -2317,17 +2432,11 @@ function SlideDetailPanel({
       <div className="flex w-[280px] flex-col items-center gap-[8px] px-[16px] pt-[8px] pb-[16px]">
         {/* 배경: 실제 배경 이미지를 썸네일로 보여줌 (없으면 아이콘) */}
         <MenuItem icon={iconImage} label="배경" thumbnail={slide.image} onClick={() => onOpenMenu('background')} />
-        {/* 시안 3: 색상 메뉴 다시 제공 (선택 화면 = 시안 1 색상 패널). 어두운 색상이면 아이콘 칸을 반전 */}
-        <MenuItem
-          icon={iconButtonStyleAa}
-          iconSize={18}
-          label="색상"
-          description={SCHEME_OPTIONS.find((option) => option.value === slide.scheme)?.title}
-          iconBox={{ background: 'black', filter: slide.scheme === 'dark' ? 'invert(1)' : undefined }}
-          onClick={() => onOpenMenu('color')}
-        />
+        {/* 색상: 모드 1처럼 팔레트 아이콘만 (선택한 옵션 이름은 표시하지 않음) */}
+        <MenuItem icon={iconPalette} label="색상" onClick={() => onOpenMenu('color')} />
         {/* 구성 요소 패널은 이번 데모 범위 밖 */}
-        <MenuItem icon={iconLayer} label="구성 요소" onClick={() => onOpenMenu('components')} />
+        {/* 이미지 캐러셀엔 글·버튼이 없어 구성 요소 메뉴 없음 */}
+        {!imageOnly && <MenuItem icon={iconLayer} label="구성 요소" onClick={() => onOpenMenu('components')} />}
       </div>
     </div>
   );
@@ -3442,6 +3551,7 @@ type SectionState = { slides: Slide[]; activeIndex: number; design: Design };
 const INITIAL_SECTIONS: Record<SectionId, SectionState> = {
   intro: { slides: INITIAL_SLIDES, activeIndex: 0, design: INITIAL_DESIGN },
   hero: { slides: HERO_SLIDES, activeIndex: 0, design: INITIAL_DESIGN },
+  gallery: { slides: GALLERY_SLIDES, activeIndex: 0, design: INITIAL_DESIGN },
 };
 
 type SetStateArg<T> = T | ((prev: T) => T);
@@ -3509,7 +3619,10 @@ export function CarouselScreenV3() {
   const addSlide = () => {
     if (slides.length >= MAX_SLIDES[activeSection]) return;
     const nextId = Math.max(0, ...slides.map((slide) => slide.id)) + 1;
-    setSlides((prev) => [...prev, activeSection === 'hero' ? makeEmptyHeroSlide(nextId) : makeEmptySlide(nextId)]);
+    setSlides((prev) => [
+      ...prev,
+      activeSection === 'hero' ? makeEmptyHeroSlide(nextId) : activeSection === 'gallery' ? makeGallerySlide(nextId, { image: null }) : makeEmptySlide(nextId),
+    ]);
     // 새 슬라이드로 캔버스를 옮기고 그 슬라이드 패널을 보여줌
     setActiveIndex(slides.length);
     setSelected('section');
@@ -3632,6 +3745,7 @@ export function CarouselScreenV3() {
         <>
           {(panel === 'list' || (isEmpty && SLIDE_PANELS.includes(panel))) && (
             <SlideListPanel
+              imageOnly={activeSection === 'gallery'}
               slides={slides}
               maxSlides={MAX_SLIDES[activeSection]}
               onReorder={reorder}
@@ -3650,7 +3764,13 @@ export function CarouselScreenV3() {
             />
           )}
           {panel === 'detail' && !isEmpty && (
-            <SlideDetailPanel index={activeIndex} slide={activeSlide} onBack={() => setPanel('list')} onOpenMenu={(menu) => setPanel(menu)} />
+            <SlideDetailPanel
+              imageOnly={activeSection === 'gallery'}
+              index={activeIndex}
+              slide={activeSlide}
+              onBack={() => setPanel('list')}
+              onOpenMenu={(menu) => setPanel(menu)}
+            />
           )}
           {!isEmpty && panel === 'components' && (
             <ComponentsPanel
