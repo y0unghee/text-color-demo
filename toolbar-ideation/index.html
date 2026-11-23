@@ -1,0 +1,2052 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500&family=Inter:wght@600&family=Albert+Sans:wght@700&display=swap" />
+<title>캔버스 툴바 시안</title>
+<style>
+  :root{
+    --ink:#111318; --ink2:#4b5160; --ink3:#8a90a0; --line:#e3e5ea;
+    --canvas:#e4e6ea; --dot:#cfd2d8; --surface:#fff; --chip:#f3f4f6;
+    --applied:#16a34a; --draft:#9aa0ac;
+    --shadow:0 1px 2px rgba(17,19,24,.06),0 4px 14px rgba(17,19,24,.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif;color:var(--ink);background:#1b1d22;font-size:13px;display:flex;flex-direction:column}
+  svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+  button,input{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+  /* ---------- 데모 컨트롤 ---------- */
+  .demo{display:flex;align-items:center;gap:16px;padding:10px 16px;color:#e8eaee;flex-wrap:wrap}
+  .demo .seg{display:flex;background:#2a2d34;border-radius:8px;padding:3px}
+  .demo .seg button{padding:6px 12px;border-radius:6px;color:#aab0bc;font-weight:500}
+  .demo .seg button.on{background:#fff;color:#111}
+  .demo .lbl{color:#8a90a0;font-size:12px}
+  .demo .desc{display:none;color:#cfd3da;font-size:12.5px;flex:1;min-width:260px}
+  .demo .desc b{color:#fff}
+
+  /* ---------- 앱 프레임 ---------- */
+  .app{font-family:"Pretendard",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;position:relative;flex:1;overflow:hidden;background:var(--canvas);border-radius:10px 10px 0 0;margin:0 8px}
+  .canvas{position:absolute;inset:0;overflow:hidden;touch-action:none;
+    background-image:radial-gradient(var(--dot) 1px,transparent 1px);background-size:16px 16px}
+  .frames{display:flex;gap:20px;padding:var(--pad-top,40px) 40px 40px;width:max-content;position:absolute;left:0;top:0;transform-origin:0 0}
+  /* 손 모양: 스페이스를 누르고 있거나 빈 캔버스 위 / 끄는 중 */
+  .canvas.can-pan,.canvas.space{cursor:grab}
+  .canvas.panning,.canvas.panning *{cursor:grabbing !important;user-select:none}
+  .frame .bar{height:32px;background:#f4f5f7;border-radius:4px;display:flex;align-items:center;gap:4px;padding:0 10px;color:var(--ink2);font-size:12px;margin-bottom:12px}
+  .frame .bar svg{width:14px;height:14px}
+  .frame .view{background:#fff;height:1200px}
+  .frame.desk .bar,.frame.desk .view{width:920px}
+  .frame.mob .bar,.frame.mob .view{width:188px}
+  .ph{padding:24px}
+  .ph i{display:block;background:#eef0f3;border-radius:6px;margin-bottom:14px}
+
+  /* 우측 속성 패널 슬롯 */
+  .panel{position:absolute;right:20px;width:300px;height:200px;background:#fff;border-radius:12px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;color:var(--ink3);font-size:12px;z-index:5}
+
+  /* 툴바 공통 */
+  .tb{display:none}
+  .pill{display:flex;align-items:center;gap:2px;background:var(--surface);border-radius:12px;box-shadow:var(--shadow);padding:4px;height:40px}
+  .ib{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--ink);position:relative}
+  .ib:hover,.tbtn:hover,.sel:hover{background:var(--chip)}
+  .ib.dim{color:#c3c7cf}
+  .tbtn{height:32px;padding:0 10px;border-radius:8px;display:flex;align-items:center;gap:6px;font-weight:500;white-space:nowrap}
+  .sel{height:32px;padding:0 10px;border-radius:8px;display:flex;align-items:center;gap:8px;font-weight:500;white-space:nowrap}
+  .sel .chev{width:14px;height:14px;color:var(--ink3)}
+  .div{width:1px;height:16px;background:var(--line);margin:0 4px}
+  .cta{height:40px;padding:0 16px;border-radius:12px;background:var(--ink);color:#fff;font-weight:600;box-shadow:var(--shadow)}
+  .pill .cta{height:32px;border-radius:8px;box-shadow:none;padding:0 12px;margin-left:4px}
+  .save{color:var(--ink3);font-size:12px;padding:0 6px 0 8px;white-space:nowrap}
+  /* 저장 상태 (live) */
+  .save.live{display:flex;align-items:center;gap:5px;overflow:hidden;max-width:96px;height:32px;transition:max-width .35s ease,padding .35s ease,opacity .25s ease;position:relative}
+  .save.live .ic{display:flex}
+  .save.live .ic svg{width:14px;height:14px}
+  .save.live .tx{transition:opacity .2s ease}
+  .spin{width:12px;height:12px;border:1.6px solid #c9cdd5;border-top-color:var(--ink2);border-radius:50%;animation:sp .7s linear infinite;margin:1px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  /* (옛 방식) 사라지면 알약이 접힘 (오른쪽 정렬이라 버튼 위치는 그대로) */
+  .save.collapse[data-state="idle"]{max-width:0;padding:0;opacity:0}
+  /* (옛 방식) 텍스트만 접히고 구름 아이콘은 남음 */
+  .save.iconmode[data-state="idle"]{max-width:30px;padding:0 4px 0 8px}
+  .save.iconmode[data-state="idle"] .tx{opacity:0}
+  /* 컨테이너 밖, 캔버스 위에 바로 놓이는 저장 상태 */
+  .save.oncanvas{color:var(--ink2);font-weight:500;padding:0 2px;text-shadow:0 0 6px var(--canvas),0 0 2px var(--canvas)}
+  .save.oncanvas.iconmode[data-state="idle"]{padding:0 2px}
+  .simbtn{background:#3b82f6;color:#fff;font-weight:600;padding:6px 12px;border-radius:8px}
+  .simbtn:hover{background:#2f6fe0}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--applied);flex:none}
+  .badge{font-size:11px;font-weight:600;padding:2px 6px;border-radius:5px;background:#e8f6ee;color:#15803d}
+  .app[data-applied="false"] .dot{background:var(--draft)}
+  .app[data-applied="false"] .badge{background:var(--chip);color:var(--ink3)}
+  .app[data-applied="false"] .badge::after{content:"미적용"}
+  .app[data-applied="true"] .badge::after{content:"적용 중"}
+  .app[data-applied="false"] .update{display:none}
+  .dname{max-width:140px;overflow:hidden;text-overflow:ellipsis}
+
+  /* 툴팁 */
+  [data-tip]:hover::after{content:attr(data-tip);position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-size:11px;padding:4px 8px;border-radius:6px;white-space:nowrap;z-index:20;pointer-events:none}
+  .bottom [data-tip]:hover::after{top:auto;bottom:calc(100% + 8px)}
+  /* '디자인 편집 나가기' 툴팁 (Figma 3583:18834): 화면 왼쪽 끝에서 잘리지 않게 버튼 왼쪽에 맞춤 */
+  [data-part="exit"] [data-tip]:hover::after{left:0;transform:none;padding:8px;border-radius:4px;background:#181d25;font-size:12px;line-height:18px;font-weight:500}
+
+  /* ---------- 현재 ---------- */
+  .app[data-v="A"] .tb-A{display:flex}
+
+  /* ---------- B안: 3분할 플로팅 ---------- */
+  .app:is([data-v="B"],[data-v="C"]) .tb-B{display:flex}
+  .tb-B{position:absolute;top:12px;left:12px;right:12px;justify-content:space-between;align-items:center;z-index:10;pointer-events:none}
+  .tb-B>*{pointer-events:auto}
+  .tb-B .side{display:flex;gap:8px;align-items:center}
+  .tb-B .center{position:absolute;left:50%;transform:translateX(-50%)}
+  .app[data-v="B"] .panel{top:64px}
+
+  /* ---------- C안: 상하 분리 (데모에서 숨김) ---------- */
+
+  .tb-C.top{position:absolute;top:10px;left:12px;right:12px;justify-content:space-between;z-index:10;pointer-events:none;font-size:12px}
+  .tb-C.bottom{position:absolute;bottom:12px;right:12px;z-index:10;align-items:center;gap:8px;font-size:12px}
+  .tb-C .pagewrap{position:relative}
+  .tb-C.bottomleft{left:16px;bottom:12px;align-items:center}
+  .tb-C>*{pointer-events:auto}
+  .tb-C .side{display:flex;gap:8px;align-items:center}
+  .crumb{color:var(--ink3)}
+  .app[data-v="C"] .panel{top:72px;right:12px}
+
+
+  /* 크레딧 (Figma 3395:513056: 아바타 26 + 코인 16 + 숫자) */
+  .credit{display:flex;align-items:center;gap:6px;height:40px;padding:0 12px 0 7px;background:var(--surface);border-radius:12px;box-shadow:var(--shadow);position:relative;cursor:pointer}
+  .credit:hover{background:#fafafb}
+  .credit .av{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#8b7cf6,#3b82f6);color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;margin-right:10px}
+  .credit .amt{display:flex;align-items:center;gap:6px;font-weight:600;font-size:14px;font-variant-numeric:tabular-nums}
+  .credit .amt svg{width:16px;height:16px;stroke-width:1.6}
+  /* 툴바 안에 들어가는 작은 크레딧 칩 (초기 시안, 미사용) */
+  .credit.inline{height:32px;box-shadow:none;border-radius:8px;padding:0 8px 0 4px}
+  .credit.inline:hover{background:var(--chip)}
+  .credit.inline .av{width:24px;height:24px;margin-right:6px}
+  .credit.inline .amt{font-size:13px}
+  .tb-B.bottomleft,.tb-C.bottomleft{position:absolute;top:auto;right:auto;bottom:16px;left:16px;z-index:10}
+  .tb-C.bottomleft{bottom:12px}
+
+  /* 줌 (실행취소 묶음 안에 들어감) */
+  .zoom{position:relative}
+  .zbtn{height:32px;padding:0 6px 0 10px;border-radius:8px;display:flex;align-items:center;gap:4px;font-weight:500;font-variant-numeric:tabular-nums;min-width:68px;justify-content:space-between}
+  .zbtn:hover,.zoom.open .zbtn{background:var(--chip)}
+  .zbtn svg{width:14px;height:14px;color:var(--ink2)}
+  .zmenu{display:none;position:absolute;right:-4px;top:calc(100% + 8px);width:200px;background:#fff;border-radius:12px;box-shadow:0 0 0 1px rgba(17,19,24,.06),0 8px 24px rgba(17,19,24,.14);padding:6px;z-index:30}
+  .zoom[data-dir="up"] .zmenu{top:auto;bottom:calc(100% + 8px)}
+  .zoom.open .zmenu{display:block}
+  .zmenu button{width:100%;height:32px;padding:0 10px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;text-align:left}
+  .zmenu button:hover{background:var(--chip)}
+  .zmenu button.on{font-weight:600}
+  .zmenu kbd{font:inherit;font-size:12px;color:var(--ink3)}
+  .zmenu hr{border:0;height:1px;background:var(--line);margin:6px 4px}
+
+  /* 디자인명 숨김 버전 */
+  /* B안은 디자인명 없음, C안은 항상 표시 */
+  .app[data-dname="off"] .dn,.app:is([data-v="B"],[data-v="C"]) .dn{display:none}
+
+  /* ---------- B안: Figma 3395:522408 수치 ---------- */
+  .tb-B{top:10px;left:12px;right:12px;font-size:12px}
+  :is(.tb-B,.tb-C) .side{gap:8px}
+  :is(.tb-B,.tb-C) .box{display:flex;align-items:center;gap:4px;height:40px;padding:4px;background:#fff;border-radius:8px}
+  :is(.tb-B,.tb-C) .ib,:is(.tb-B,.tb-C) .tbtn,:is(.tb-B,.tb-C) .sel,:is(.tb-B,.tb-C) .zbtn,:is(.tb-B,.tb-C) .pagesel2{border-radius:8px}
+  :is(.tb-B,.tb-C) .ib:hover,:is(.tb-B,.tb-C) .tbtn:hover,:is(.tb-B,.tb-C) .sel:hover,:is(.tb-B,.tb-C) .zbtn:hover,:is(.tb-B,.tb-C) .zoom.open .zbtn,:is(.tb-B,.tb-C) .pagesel2:hover{background:rgba(24,29,37,.04)}
+  :is(.tb-B,.tb-C) .box>.ib svg,:is(.tb-B,.tb-C) .hist .ib svg{width:20px;height:20px;stroke-width:1.5}
+  :is(.tb-B,.tb-C) .box:first-child .ib svg{width:16px;height:16px}
+  :is(.tb-B,.tb-C) .tbtn{height:32px;padding:7px 12px 7px 8px;gap:4px;font-size:12px;font-weight:500;color:#000}
+  :is(.tb-B,.tb-C) .div{background:rgba(51,62,76,.16);margin:0}
+  :is(.tb-B,.tb-C) .cta{height:32px;min-width:64px;width:68px;padding:6px 12px;border-radius:8px;background:#181d25;font-size:12px;font-weight:500;box-shadow:none;margin:0}
+  :is(.tb-B,.tb-C) .pagesel2{width:240px;height:32px;display:flex;align-items:center;gap:8px;padding:7px 8px;font-size:12px;font-weight:500;color:#000;text-align:left}
+  :is(.tb-B,.tb-C) .pagesel2 span{flex:1}
+  :is(.tb-B,.tb-C) .pagesel2 svg{width:16px;height:16px;color:#4b5160}
+  :is(.tb-B,.tb-C) .hist{padding-left:12px}
+  :is(.tb-B,.tb-C) .zbtn{height:32px;min-width:0;padding:3px 8px 3px 12px;gap:2px;font-size:12px;font-weight:500;color:#000}
+  :is(.tb-B,.tb-C) .zbtn svg{width:16px;height:16px;color:#000}
+  :is(.tb-B,.tb-C) .save.cloudmode{flex-direction:row-reverse;gap:0;padding:0 8px 0 0;color:#99a0aa;font-weight:400;font-size:12px;max-width:28px}
+  :is(.tb-B,.tb-C) .save.cloudmode .ic svg{width:20px;height:20px;stroke-width:1.4}
+  :is(.tb-B,.tb-C) .save.cloudmode[data-state="idle"]{max-width:28px;padding:0 8px 0 0;gap:0}
+  .app[data-v="B"] .panel{top:72px;right:12px}
+  :is(.tb-B,.tb-C) img.fi{display:block;flex:none}
+  :is(.tb-B,.tb-C) .ib.dim img{opacity:1}
+  :is(.tb-B,.tb-C) .save .cc{position:relative;flex:none;width:20px;height:20px}
+  :is(.tb-B,.tb-C) .save .cc img{position:absolute;left:1.1px;top:4.15px;display:block;max-width:none}
+  .tb-B.bottomleft{left:16px;bottom:16px}
+  .credit2{display:flex;align-items:center;gap:4px;height:32px;padding:7px 11px 7px 9px;background:#fff;border-radius:8px;font-size:12px;font-weight:500;color:#000;position:relative;
+    box-shadow:0 0 1px rgba(65,78,97,.08),0 16px 64px rgba(65,78,97,.16)}
+  /* 크레딧 호버 (Figma 3454:470518): AI 그라데이션 3% + 호버 4% + 40% 그라데이션 테두리 */
+  .credit2{border:1px solid transparent;padding:6px 10px 6px 8px}
+  .credit2:hover{border-radius:6px;box-shadow:none;
+    background:linear-gradient(90deg,rgba(27,78,254,.03),rgba(165,77,255,.03)) padding-box,linear-gradient(rgba(24,29,37,.04),rgba(24,29,37,.04)) padding-box,linear-gradient(#fff,#fff) padding-box,
+      linear-gradient(90deg,rgba(27,78,254,.4),rgba(165,77,255,.4)) border-box,linear-gradient(#fff,#fff) border-box}
+  .credit2 svg.spark{width:16px;height:16px}
+  /* 크레딧 카드 */
+  .credit-wrap{position:relative}
+  .credit-card{display:none;position:absolute;left:-4px;bottom:-4px;width:230px;padding:4px;flex-direction:column;gap:4px;background:#fff;border-radius:8px;
+    filter:drop-shadow(0 0 .5px rgba(65,78,97,.08)) drop-shadow(0 16px 32px rgba(65,78,97,.16))}
+  .credit-card.open{display:flex}
+  .card-open .credit2{visibility:hidden}
+  .cc-title{display:flex;align-items:center;gap:16px;padding:8px;width:222px}
+  .cc-avatar{position:relative;width:32px;height:32px;border-radius:9999px;border:1px solid rgba(51,62,76,.1);overflow:hidden;flex:none}
+  .cc-avatar img{position:absolute;left:-1px;top:-1px;display:block;max-width:none}
+  .cc-text{display:flex;flex-direction:column;flex:1;min-width:0;white-space:nowrap}
+  .cc-name{font-size:14px;line-height:20px;color:#000;overflow:hidden;text-overflow:ellipsis}
+  .cc-plan{font-size:12px;line-height:18px;color:#667080;overflow:hidden;text-overflow:ellipsis}
+  .cc-row{display:flex;align-items:center;justify-content:space-between;height:32px;padding-right:16px;border-radius:6px;border:1px solid transparent;
+    background:linear-gradient(90deg,rgba(27,78,254,.03),rgba(165,77,255,.03)) padding-box,linear-gradient(#fff,#fff) padding-box,linear-gradient(90deg,rgba(27,78,254,.4),rgba(165,77,255,.4)) border-box,linear-gradient(#fff,#fff) border-box}
+  .cc-amount{display:flex;align-items:center;gap:4px;padding:7px 12px 7px 8px;border-radius:8px;font-size:12px;line-height:18px;font-weight:500;color:#000}
+  .cc-amount img{display:block}
+  .cc-charge{font-size:12px;line-height:18px;font-weight:500;color:#414e61;text-decoration:underline;text-underline-position:from-font}
+  .cc-charge:hover{color:#181d25}
+
+  /* 페이지 선택 메뉴 (Figma 3448:132768) */
+  .tb-B .pagewrap{position:absolute}
+  :is(.tb-B,.tb-C) .pagesel2.open{background:#f6f7f9}
+  /* 페이지 메뉴 (Figma 3590:21810) */
+  .pagemenu{display:none;position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);width:244px;padding:0;background:#fff;border:1px solid rgba(51,62,76,.1);border-radius:8px;box-shadow:0 4px 10px rgba(65,78,97,.08);z-index:30;flex-direction:column}
+  .pagemenu.open{display:flex}
+  .pm-sec{display:flex;flex-direction:column;gap:12px;padding:12px 0;box-shadow:inset 0 -1px 0 rgba(51,62,76,.1)} /* Figma 안쪽 선: 높이에 더하지 않음 */
+  .pm-title{display:flex;align-items:center;gap:8px;padding:0 12px 0 16px;font-size:11px;line-height:14px;font-weight:500;color:#667080}
+  .pm-title span:first-child{flex:1}
+  .pm-add{width:24px;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex:none}
+  .pm-add:hover{background:rgba(24,29,37,.04)}
+  /* 페이지 추가 툴팁: 버튼 위쪽 4px */
+  .pm-add{position:relative}
+  .pm-add[data-tip]:hover::after{top:auto;bottom:calc(100% + 4px)}
+  .pm-add.ghost{visibility:hidden}
+  .pm-list{display:flex;flex-direction:column;padding:0 10px}
+  .pm-item{position:relative;display:flex;align-items:center;gap:8px;height:38px;padding:10px 5px 10px 9px;border-radius:6px;font-size:12px;line-height:18px;color:#000;text-align:left;width:100%;cursor:pointer}
+  .pm-item img{display:block;flex:none}
+  .pm-item span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* 선택: 흰 배경 + 파란 글자·아이콘 / 호버: 회색 배경 */
+  .pm-item.on{background:#fff;color:#1a66ff}
+  .pm-item:hover,.pm-item.menu-open{background:#f6f7f9}
+  /* 콘텐츠 페이지 호버: 아이콘 자리에 순서 점, 오른쪽에 더보기 */
+  .pm-item .pm-dots{display:none;width:16px;height:16px;flex:none;align-items:center;justify-content:center;cursor:grab}
+  .pm-dots img{display:block;margin:-1px}
+  .pm-more{display:none;width:24px;height:24px;border-radius:4px;align-items:center;justify-content:center;flex:none}
+  .pm-more img{display:block}
+  .pm-more:hover,.pm-item.menu-open .pm-more{background:rgba(24,29,37,.04)}
+  .pm-item.drag:hover .pm-dots,.pm-item.drag.menu-open .pm-dots,.pm-item.dragging .pm-dots{display:flex}
+  .pm-item.drag:hover .pi,.pm-item.drag.menu-open .pi,.pm-item.dragging .pi{display:none}
+  .pm-item.drag:is(:hover,.menu-open,.dragging){padding-right:7px}
+  .pm-item.drag:is(:hover,.menu-open,.dragging) .pm-more{display:flex}
+  .pm-item.drag .pm-dots{cursor:inherit}
+  /* 끄는 중 */
+  .pagemenu.is-dragging,.pagemenu.is-dragging *{cursor:grabbing !important;user-select:none}
+  .pagemenu.is-dragging .pm-item:not(.dragging){background:none}
+  .pagemenu.is-dragging .pm-item.on:not(.dragging){background:#fff}
+  .pagemenu.is-dragging .pm-item:not(.dragging) .pm-dots,.pagemenu.is-dragging .pm-item:not(.dragging) .pm-more{display:none}
+  .pagemenu.is-dragging .pm-item:not(.dragging) .pi{display:block}
+  .pagemenu.is-dragging .pm-item:not(.dragging){padding-right:5px}
+  .pm-item.dragging{background:#f6f7f9;box-shadow:0 4px 10px rgba(65,78,97,.12),0 0 0 1px rgba(51,62,76,.1);z-index:2}
+  .pm-pop-item[hidden]{display:none}
+  /* 이름 수정 중 */
+  /* 더보기 메뉴 (Figma 3454:469101) */
+  .pm-pop{display:none;position:absolute;width:160px;padding:11px 1px;background:#fff;border:1px solid rgba(51,62,76,.1);border-radius:8px;box-shadow:0 0 1px rgba(65,78,97,.08),0 16px 64px rgba(65,78,97,.16);z-index:40;flex-direction:column}
+  .pm-pop.open{display:flex}
+  .pm-pop-item{display:flex;align-items:center;gap:8px;height:38px;padding:10px 12px;font-size:12px;line-height:18px;color:#000;text-align:left;width:100%}
+  .pm-pop-item img{display:block;flex:none}
+  .pm-pop-item:hover{background:rgba(24,29,37,.04)}
+  .pm-pop-item.danger{color:#e5261c}
+
+  /* 설명형 툴팁 (Figma 3395:517457) */
+  .rtip{position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);width:189px;padding:8px;border-radius:4px;background:#181d25;color:#fff;
+    font-size:12px;line-height:18px;font-weight:500;text-align:left;white-space:normal;word-break:keep-all;z-index:50;pointer-events:none;
+    opacity:0;visibility:hidden;transition:opacity .12s ease,visibility 0s linear .12s}
+  .has-rtip:hover .rtip,.has-rtip:focus-visible .rtip{opacity:1;visibility:visible;transition:opacity .12s ease .3s,visibility 0s linear .3s}
+
+  /* 미러링 안내 (Figma 3395:517470, 너비 360) */
+  .mirror-box{position:relative}
+  .mirror-pop{display:none;position:absolute;top:calc(100% + 4px);right:0;width:360px;padding:0;flex-direction:column;background:#fff;border:1px solid rgba(51,62,76,.1);border-radius:8px;
+    box-shadow:0 0 1px rgba(65,78,97,.08),0 16px 64px rgba(65,78,97,.16);z-index:45;cursor:default}
+  .mirror-pop.open{display:flex}
+  .mp-head{padding:20px 20px 8px}
+  .mp-head h3{margin:0;font-size:16px;line-height:24px;font-weight:700;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mp-body{padding:0 20px 20px}
+  .mp-body p{margin:0;font-size:14px;line-height:20px;color:#414e61}
+  .mp-actions{display:flex;flex-direction:column;align-items:center;gap:8px;padding:8px 20px}
+  .mp-primary{position:relative;width:100%;height:48px;padding:12px 24px;border-radius:8px;background:#1a66ff;color:#fff;font-size:14px;line-height:20px;font-weight:600;overflow:hidden}
+  .mp-primary::after{content:"";position:absolute;inset:0;background:#181d25;opacity:0;transition:opacity .12s}
+  .mp-primary:hover::after{opacity:.08}
+  .mp-help{display:flex;align-items:center;gap:4px;padding:7px 12px 7px 8px;border-radius:8px;font-size:12px;line-height:18px;font-weight:500;color:#667080}
+  .mp-help img{display:block}
+  .mp-help:hover{background:rgba(24,29,37,.04)}
+  #mirrorBtn.open{background:rgba(24,29,37,.04)}
+  #mirrorBtn.open .rtip{display:none}
+
+  /* C안: 미러링(아이콘+라벨), 미리보기(라벨만) */
+  .lbl-b{display:none}
+  .tb-C .lbl-b{display:inline;font-size:12px;line-height:18px;font-weight:500;color:#000;white-space:nowrap}
+  .tb-C #mirrorBtn{width:auto;gap:4px;padding:6px 12px 6px 8px}
+  .tb-C .ib.pv{width:auto;padding:7px 12px}
+  .tb-C .ib.pv img{display:none}
+  .tb-C .ib.pv[data-tip]:hover::after{display:none}
+
+  /* C안 + 디자인명 표시 (Figma 3439:638418): 나가기 | 디자인명 · 상태 / 페이지 를 한 박스로 */
+  .bgroup{display:contents}
+  .app[data-dname="on"] .tb-C .bgroup{display:flex;align-items:center;gap:4px;height:40px;padding:4px;background:#fff;border-radius:8px}
+  .app[data-dname="on"] .tb-C .bgroup>[data-part]{background:none;padding:0;height:auto;border-radius:0}
+  .app[data-dname="on"] .tb-C .bgroup>[data-part="exit"],.app[data-dname="on"] .tb-C .bg-div{margin-right:4px}
+  .tb-C .bg-div{width:1px;height:16px;background:rgba(51,62,76,.16);margin:0}
+  .slash{position:relative;width:16px;height:16px;flex:none}
+  .slash::before{content:"";position:absolute;left:50%;top:50%;width:1px;height:16px;background:rgba(51,62,76,.16);transform:translate(-50%,-50%) rotate(15deg)}
+  /* 디자인명 + 상태 배지 */
+  .app[data-dname="on"] .tb-C [data-part="dname"] .sel{display:flex;align-items:center;gap:0;height:32px;padding:0;background:none;cursor:default}
+  .app[data-dname="on"] .tb-C [data-part="dname"] .sel>.dot{display:none}
+  .app[data-dname="on"] .tb-C [data-part="dname"] .dname{max-width:160px;padding:7px 8px;border-radius:8px;font-size:12px;line-height:18px;font-weight:500;color:#000;cursor:pointer}
+  .app[data-dname="on"] .tb-C [data-part="dname"] .dname:hover{background:rgba(24,29,37,.04)}
+  .app[data-dname="on"] .tb-C [data-part="dname"] .badge{display:flex;align-items:center;gap:4px;padding:4px 8px;border-radius:100px;background:rgba(26,102,255,.12);color:#1a66ff;font-size:11px;line-height:14px;font-weight:500}
+  .app[data-dname="on"] .tb-C [data-part="dname"] .badge::before{content:"";width:6px;height:6px;border-radius:100px;background:#1a66ff;flex:none}
+  .app[data-dname="on"][data-applied="false"] .tb-C [data-part="dname"] .badge{background:rgba(51,62,76,.08);color:#667080}
+  .app[data-dname="on"][data-applied="false"] .tb-C [data-part="dname"] .badge::before{background:#99a0aa}
+  /* 짧은 페이지 선택 (항상 회색 바탕) */
+  .app[data-dname="on"] .tb-C .pagesel2{width:auto;background:#f6f7f9;padding:7px 8px;gap:8px}
+  .app[data-dname="on"] .tb-C .pagesel2:hover{background:#eef0f3}
+  .app[data-dname="on"] .tb-C .pagesel2 span{flex:none;min-width:48px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .app[data-dname="on"] .tb-C .pagemenu{left:0;transform:none}
+
+
+  /* 여백 비교 라벨 */
+  .gain{display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:12px;background:rgba(17,19,24,.82);color:#fff;font-size:12px;padding:6px 10px;border-radius:8px;z-index:10;white-space:nowrap}
+
+  /* ---------- B안: Figma 3499:155094 (1920 기준) 상단 간격 ---------- */
+  .tb-B .box{height:36px;padding:2px;gap:4px;box-shadow:0 4px 10px rgba(65,78,97,.08)}
+  .tb-B .hist{padding:2px 2px 2px 6px;gap:0}
+  .tb-B .hist .div{margin:0 4px}
+  .tb-B .save.cloudmode,.tb-B .save.cloudmode[data-state="idle"]{width:32px;max-width:32px;height:32px;padding:0;justify-content:center}
+  /* Figma 3589:20194: 미리보기 | 미러링 · 업데이트, 버튼 30px */
+  .tb-B .mirror-box{padding:3px 3px 3px 2px}
+  .tb-B .mirror-box .ib{width:30px;height:30px;border-radius:6px}
+  .tb-B .mirror-box .ib img.fi{width:16px;height:16px}
+  .tb-B .cta{height:30px;border-radius:6px}
+  .tb-B .side:last-child{gap:8px}
+  .app:is([data-v="B"],[data-v="C"]) .panel{top:68px;right:12px;width:280px}
+  /* ---------- C안 (Figma 3612:507493): B안 + 미리보기·미러링을 캔버스 프레임 머리로 ---------- */
+  .fb-btn{display:none;position:relative;width:24px;height:24px;border-radius:4px;background:none;align-items:center;justify-content:center;flex:none}
+  .fb-btn:hover{background:#2E97FF}
+  .fb-btn:hover img{filter:brightness(0) invert(1)} /* 호버: 아이콘 흰색 */
+  .fb-btn img{display:block}
+  .app[data-v="C"] .fb-btn{display:flex}
+  .app[data-v="C"] .frame .bar svg{display:none}
+  .app[data-v="C"] .frame{background:rgba(255,255,255,.3);border:1px solid rgba(51,62,76,.16);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:12px;align-self:flex-start}
+  .app[data-v="C"] .frame .bar{margin-bottom:0}
+  .app[data-v="C"] .mirror-box :is(.pv,#mirrorBtn,.div){display:none}
+  /* 미러링 연결 중 스피너 (Figma Library 4691:17668): 미러링 아이콘 자리에서 3초 회전 */
+  .m-spin{display:none;flex:none;border-radius:50%;background:conic-gradient(from 90deg,rgba(0,0,0,0),rgba(0,0,0,.9));-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 15.5%),#000 calc(100% - 15.5% + .5px));mask:radial-gradient(farthest-side,transparent calc(100% - 15.5%),#000 calc(100% - 15.5% + .5px));animation:mspin .8s linear infinite}
+  #mirrorBtn .m-spin{width:20px;height:20px}
+  #frameMirror .m-spin{width:16px;height:16px}
+  :is(#mirrorBtn,#frameMirror).is-mirroring > img{display:none}
+  :is(#mirrorBtn,#frameMirror).is-mirroring > .m-spin{display:block}
+  #frameMirror.is-mirroring{background:none}
+  #frameMirror.is-mirroring:hover img{filter:none}
+  @keyframes mspin{to{transform:rotate(360deg)}}
+  .snackbar{position:absolute;top:16px;left:50%;z-index:70;width:320px;padding:16px;border-radius:8px;background:#333e4c;color:#fff;font-size:14px;line-height:20px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 8px rgba(65,78,97,.16),0 2px 24px rgba(65,78,97,.2);pointer-events:none;opacity:0;transform:translate(-50%,-8px);transition:opacity .2s ease,transform .2s ease}
+  .snackbar.show{opacity:1;transform:translate(-50%,0)}
+  .mp-dim{display:none;position:absolute;inset:0;background:rgba(0,0,0,.4);z-index:50;align-items:center;justify-content:center}
+  .mp-dim.open{display:flex}
+  .mp-dim .mirror-pop{position:static}
+  .fb-tip{position:fixed;z-index:60;width:189px;padding:8px;border-radius:4px;background:#181d25;color:#fff;font-size:12px;line-height:18px;font-weight:500;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .12s ease,visibility 0s linear .12s}
+  .fb-tip b{display:block;font-weight:500}
+  .fb-tip span{display:block;color:rgba(255,255,255,.8)}
+  .fb-tip.show{opacity:1;visibility:visible;transition:opacity .12s ease .3s,visibility 0s linear .3s}
+  /* 데스크탑·모바일 표기: 배경 바 없이 아이콘 14 + 11px 라벨 */
+  .app:is([data-v="A"],[data-v="B"],[data-v="C"]) .frame .bar{height:auto;background:none;border-radius:0;padding:0;gap:4px;color:#414e61;font-size:11px;line-height:14px;font-weight:500}
+  /* 캔버스 스크롤바 미노출 (스크롤 동작은 유지) */
+  .canvas{scrollbar-width:none;-ms-overflow-style:none}
+  .canvas::-webkit-scrollbar{display:none}
+
+  /* ---------- 페이지 설정 다이얼로그 (Figma 3590:22706) ---------- */
+  .ps-dim{display:none;position:absolute;inset:0;background:rgba(0,0,0,.4);z-index:50;align-items:center;justify-content:center}
+  .ps-dim.open{display:flex}
+  .ps-dialog{width:560px;max-width:calc(100% - 32px);background:#fff;border-radius:12px;box-shadow:0 0 1px rgba(65,78,97,.08),0 16px 64px rgba(65,78,97,.16);display:flex;flex-direction:column;overflow:hidden}
+  .ps-head{display:flex;align-items:center;gap:32px;padding:16px 16px 8px 24px}
+  .ps-head h3{flex:1;margin:0;font-size:18px;line-height:24px;font-weight:700;color:#000;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ps-close{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:none}
+  .ps-close:hover{background:rgba(24,29,37,.04)}
+  .ps-close img{display:block}
+  .ps-body{display:flex;flex-direction:column;gap:32px;padding:16px 24px 32px}
+  .ps-field{display:flex;flex-direction:column;gap:8px}
+  .ps-label{font-size:12px;line-height:18px;font-weight:600;color:#414e61}
+  .ps-input{display:flex;align-items:center;gap:8px;height:52px;padding:14px 16px;border:1px solid rgba(51,62,76,.16);border-radius:8px;background:#fff;cursor:text}
+  .ps-input:focus-within{border-color:#181d25}
+  .ps-input input{flex:1;min-width:0;border:0;outline:none;padding:0;font:inherit;font-size:14px;line-height:20px;color:#000;background:none}
+  .ps-input input::placeholder{color:#99a0aa}
+  .ps-prefix{font-size:14px;line-height:20px;color:#333e4c;flex:none}
+  .ps-help{display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:18px;font-weight:500;color:#667080}
+  .ps-help span:first-child{flex:1;min-width:0}
+  .ps-help .ps-count{width:80px;flex:none;text-align:right}
+  .ps-actions{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid rgba(51,62,76,.1)}
+  .ps-save{height:40px;min-width:64px;padding:6px 16px;border-radius:8px;background:#181d25;color:#fff;font-size:14px;line-height:20px;font-weight:500}
+  .ps-save:hover{background:#2b313b}
+  .ps-save:disabled{background:#d3d6da;color:#99a0aa;cursor:default}
+  /* 구름 아이콘 툴팁 (Figma 3583:18834): 아이콘 버튼 바로 아래 가운데 */
+  :is(.tb-B,.tb-C) .save.cloudmode{overflow:visible;position:relative;cursor:default}
+  .save-tip{position:absolute;top:100%;left:50%;transform:translateX(-50%);padding:8px;border-radius:4px;background:#181d25;color:#fff;font-size:12px;line-height:18px;font-weight:500;white-space:nowrap;z-index:25;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .12s ease,visibility 0s linear .12s}
+  .save.cloudmode:hover .save-tip{opacity:1;visibility:visible;transition:opacity .12s ease .3s,visibility 0s linear .3s}
+  .tb-C .save-tip{top:auto;bottom:100%}
+  /* 미러링 툴팁 (Figma 3589:19652): 설명만, 툴바 오른쪽 끝에 맞춤, 박스 아래 2px */
+  .rtip-title{display:none}
+  /* B안은 버튼에 글자가 없으니 툴팁에 '미러링' 제목 + 80% 흰색 설명 */
+  .tb-B .rtip-title{display:block}
+  .tb-B .rtip-desc{display:block;color:rgba(255,255,255,.8)}
+  .tb-B .rtip{left:auto;right:-75px;transform:none;top:calc(100% + 5px)}
+
+  /* ---------- A안: 고정 바 (Figma 3590:23188) ---------- */
+  .tb-A.top{position:absolute;top:0;left:0;right:0;height:47px;box-sizing:border-box;padding:7px 12px 7px 10px;background:#fff;border-bottom:1px solid rgba(51,62,76,.1);align-items:center;justify-content:space-between;z-index:10;font-size:12px}
+  .tb-A.bottomleft{position:absolute;left:16px;bottom:16px;z-index:10;align-items:center;gap:8px}
+  /* A안 확대/축소: 상단 바에서 빼고 왼쪽 아래(크레딧 옆)로 */
+  .tb-A .hist .zoom,.tb-A .hist .div{display:none}
+  .tb-A .credit-wrap{z-index:2} /* 크레딧 카드가 확대/축소 바 위로 */
+  .zbar{display:flex;align-items:center;gap:4px;height:32px;box-sizing:border-box;padding:4px 4px 4px 6px;background:#fff;border-radius:8px;filter:drop-shadow(0 4px 5px rgba(65,78,97,.08))}
+  .zb-ib{position:relative;width:24px;height:24px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+  .zb-ib:hover{background:rgba(24,29,37,.04)}
+  .zb-ib img{display:block}
+  .zb-div{width:1px;height:16px;background:rgba(51,62,76,.16);flex:none}
+  .tb-A .zbar .zbtn{height:24px;min-width:0;padding:3px 4px 3px 6px;gap:2px;border-radius:8px;font-size:12px;line-height:18px;font-weight:400;color:#000;background:none}
+  .tb-A .zbar .zbtn:hover,.tb-A .zbar .zoom.open .zbtn{background:rgba(24,29,37,.04)}
+  .zbar .zbtn img,.zbar .zbtn svg{width:16px;height:16px;display:block}
+  .zbar .zmenu{right:auto;left:-4px}
+  .zbar [data-tip]:hover::after{top:auto;bottom:calc(100% + 8px)}
+  .tb-A .grp{display:flex;align-items:center}
+  .tb-A .grp.left{gap:8px}
+  .tb-A .a-div+*{margin-left:-4px}
+  .tb-A .grp.right{gap:12px}
+  .tb-A .box{display:flex;align-items:center;gap:4px;height:auto;padding:0;background:none;box-shadow:none;border-radius:0}
+  .tb-A .div{width:1px;height:16px;background:rgba(51,62,76,.16);margin:0;flex:none}
+  .tb-A img.fi{display:block;flex:none}
+  .tb-A .ib,.tb-A .tbtn,.tb-A .pagesel2{border-radius:8px}
+  .tb-A .ib:hover,.tb-A .tbtn:hover{background:rgba(24,29,37,.04)}
+  .tb-A .ib.dim img{opacity:1}
+  .tb-A .tbtn{height:32px;padding:7px 12px 7px 8px;gap:4px;font-size:12px;line-height:18px;font-weight:500;color:#000}
+  /* 페이지 선택: 가운데, 240px, 아이콘 + 이름 + 화살표 (B안과 같은 구성) */
+  .tb-A .center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+  .tb-A .pagesel2{width:240px;height:32px;display:flex;align-items:center;gap:8px;padding:7px 8px;background:#f6f7f9;font-size:12px;line-height:18px;font-weight:500;color:#000;text-align:left}
+  .tb-A .pagesel2:hover,.tb-A .pagesel2.open{background:#eef0f3}
+  .tb-A .pagesel2 span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* 저장 상태: 저장중... → 저장됨 → 구름 아이콘, 실행 취소·다시 실행, 확대/축소 */
+  .tb-A .hist{gap:0}
+  /* 확대/축소: B안과 같은 자리 (실행 취소·다시 실행 | 100% ⌄) */
+  .tb-A .hist .div{margin:0 4px}
+  .tb-A .zbtn{height:32px;min-width:0;padding:3px 8px 3px 12px;gap:2px;border-radius:8px;font-size:12px;line-height:18px;font-weight:500;color:#000}
+  .tb-A .zbtn:hover,.tb-A .zoom.open .zbtn{background:rgba(24,29,37,.04)}
+  .tb-A .zbtn img,.tb-A .zbtn svg{width:16px;height:16px;display:block}
+  .tb-A .save{padding:0;margin-right:12px;color:#99a0aa;font-size:12px;line-height:18px;font-weight:400;max-width:80px}
+  .tb-A .save .ic,.tb-A .save .save-tip{display:none}
+  /* 저장중... → 저장됨 문구가 지나가면 구름 아이콘만 남김 (B안과 같은 32px 버튼 + 호버 툴팁) */
+  .tb-A .save[data-state="idle"]{width:32px;max-width:32px;padding:0;margin-right:0;justify-content:center;overflow:visible;position:relative;cursor:default}
+  .tb-A .save[data-state="idle"] .tx{display:none}
+  .tb-A .save[data-state="idle"] .ic{display:flex}
+  .tb-A .save[data-state="idle"] .save-tip{display:block}
+  .tb-A .save .cc{position:relative;flex:none;width:20px;height:20px}
+  .tb-A .save .cc img{position:absolute;left:1.1px;top:4.15px;display:block;max-width:none}
+  /* 미러링 묶음: | 미러링(아이콘+라벨) | 미리보기(라벨) 업데이트 */
+  .tb-A .mirror-box{position:relative;gap:4px}
+  .tb-A .mirror-box::before{content:"";width:1px;height:16px;background:rgba(51,62,76,.16);order:0;flex:none}
+  .tb-A #mirrorBtn{order:1;width:auto;height:32px;gap:4px;padding:7px 12px 7px 8px}
+  .tb-A #mirrorBtn img.fi{width:16px;height:16px}
+  .tb-A .mirror-box>.div{order:2}
+  .tb-A .ib.pv{order:3;width:auto;height:32px;padding:7px 12px}
+  .tb-A .ib.pv img{display:none}
+  .tb-A .ib.pv[data-tip]:hover::after{display:none}
+  .tb-A .cta{order:4;height:32px;min-width:64px;width:68px;padding:6px 12px;border-radius:8px;background:#181d25;color:#fff;font-size:12px;font-weight:500;box-shadow:none;margin:0}
+  .tb-A .lbl-b{display:inline;font-size:12px;line-height:18px;font-weight:500;color:#000;white-space:nowrap}
+  /* 패널: 바 아래 오른쪽에 붙음 (292px, 전체 높이) */
+  .app[data-v="A"] .panel{top:47px;right:0;bottom:0;width:292px;height:auto;border-radius:0;box-shadow:0 4px 10px rgba(65,78,97,.08)}
+  /* 구름 아이콘 문구는 B·C안에선 숨김 */
+  :is(.tb-B,.tb-C) .save.cloudmode .tx{display:none}
+
+  /* ---------- Main 페이지 캔버스 화면 (Figma 3598:23976 데스크탑 / 3598:23899 모바일) ---------- */
+  .site-view{position:relative;overflow:hidden}
+  .site{display:none;position:absolute;left:0;top:0;transform-origin:0 0;background:#fff;color:#111;font-family:"Pretendard",sans-serif;-webkit-font-smoothing:antialiased}
+  .app[data-page="main"] .site[data-key="main"],.app[data-page="shop"] .site[data-key="shop"],.app[data-page="about"] .site[data-key="about"]{display:block}
+  .app:is([data-page="main"],[data-page="shop"],[data-page="about"]) .site-ph{display:none}
+  .site *{margin:0;box-sizing:border-box}
+  .site img{display:block}
+  .site .en,.site .s-head a,.site h2,.site h3,.site h4{font-family:"DM Sans",sans-serif;font-optical-sizing:auto;font-variation-settings:"opsz" 14}
+  .site .s-brand{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:"Inter",sans-serif;font-weight:600;font-size:20px;line-height:28px;color:#372320}
+  .site .s-head{position:relative;display:flex;align-items:center;justify-content:space-between;background:#fff}
+  .site .s-head a{text-transform:uppercase;color:#372320;line-height:1.6}
+  .site .s-hero-media{position:relative;height:100%;overflow:hidden;background:rgba(0,0,0,.3);display:flex;flex-direction:column;justify-content:flex-end}
+  .site .s-hero-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .site .s-tb{position:relative;z-index:1}
+  .site [data-layer="image"]{position:relative}
+  .site [data-layer="image"]::after{content:"";position:absolute;inset:0;background:#000;opacity:var(--ovl,0);pointer-events:none;border-radius:inherit}
+  .site .s-hero h2{position:relative;font-weight:500;line-height:1.3;color:#fff}
+  .site .s-title{display:flex;flex-direction:column;width:100%}
+  .site .s-title h3{font-weight:500;line-height:1.4;color:#111}
+  .site .s-title p{font-size:14px;line-height:1.6;color:rgba(17,17,17,.6)}
+  .site .s-thumb{border-radius:8px;overflow:hidden;aspect-ratio:120/150}
+  .site .s-thumb img,.site .s-media img{width:100%;height:100%;object-fit:cover}
+  .site .s-info{display:flex;flex-direction:column;gap:6px;padding:16px 4px 0}
+  .site .s-name{font-size:14px;line-height:1.6;font-weight:500;color:#111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .site .s-price{font-size:14px;line-height:1.6;color:#111}
+  .site .s-media{border-radius:8px;overflow:hidden}
+  .site .s-loop h4{font-weight:500;font-size:20px;line-height:24px;text-transform:capitalize;color:#111}
+  .site .s-loop p{font-family:"DM Sans",sans-serif;font-size:14px;line-height:20px;opacity:.5}
+  .site .s-policy{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;line-height:16px}
+  .site .s-policy b{font-weight:700}
+  .site .s-legal{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;opacity:.5;font-size:12px;line-height:16px;white-space:nowrap}
+  .site .s-legal i{width:1px;height:12px;background:#111}
+  .site .s-copy{font-size:12px;line-height:16px}
+  /* 데스크탑 1920 */
+  .dsite{width:1920px}
+  .dsite .s-head{height:54px;padding:0 16px}
+  .dsite .s-head nav{display:flex;gap:12px;height:100%;align-items:center}
+  .dsite .s-head a{padding:0 8px;font-size:14px}
+  .dsite .s-hero{height:1080px;padding:19px}
+  .dsite .s-hero-media{padding:64px 36px}
+  .dsite .s-hero h2{font-size:52px}
+  /* ---------- About 페이지 (Figma 3602:27709 / 3602:27633) ---------- */
+  .site .s-intro-tb{display:flex;flex-direction:column;width:100%}
+  .site .s-intro h2{font-weight:500;line-height:1.3;color:#000}
+  .site .s-intro p{line-height:1.5;color:rgba(17,17,17,.6)}
+  .site .s-story-media{position:relative;overflow:hidden}
+  .site .s-story-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+  .site .s-story-box{background:#212121;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
+  .site .s-story-tb{display:flex;flex-direction:column;gap:12px}
+  .site .s-story h3{font-weight:500;line-height:1.4;color:#fff}
+  .site .s-story p{font-size:14px;line-height:1.6;color:rgba(255,255,255,.6)}
+  .dsite .s-intro{padding:128px 24px}
+  .dsite .s-intro-tb{gap:24px}
+  .dsite .s-intro h2{font-size:60px}
+  .dsite .s-intro p{font-size:16px}
+  .dsite .s-story{display:grid;grid-template-columns:1fr 1fr;gap:19px;padding:19px;align-items:start}
+  .dsite .s-story-media{aspect-ratio:931.5/1164.38;border-radius:8px}
+  .dsite .s-story-box{align-self:stretch;border-radius:8px;padding:48px 40px}
+  .dsite .s-story h3{font-size:40px}
+  .msite .s-intro{padding:64px 16px}
+  .msite .s-intro-tb{gap:20px}
+  .msite .s-intro h2{font-size:48px}
+  .msite .s-intro p{font-size:15px}
+  .msite .s-story{display:flex;flex-direction:column;gap:16px;padding:16px}
+  .msite .s-story-media{aspect-ratio:358/447.5;border-radius:6px}
+  .msite .s-story-box{border-radius:6px;padding:20px}
+  .msite .s-story h3{font-size:32px}
+  .dsite .s-best{display:flex;flex-direction:column;gap:40px;padding:120px 19px}
+  .dsite .s-title{gap:16px}
+  .dsite .s-title h3{font-size:40px}
+  .dsite .s-best-row{display:flex;gap:16px;align-items:flex-start}
+  .dsite .s-card{width:458.02px;flex:none}
+  .dsite .s-media{flex:1;aspect-ratio:1407.98/938.6533}
+  .dsite .s-foot{padding:20px 30px 0}
+  .dsite .s-foot-top{display:flex;justify-content:space-between;align-items:flex-start;padding:40px 0 40px;margin-bottom:60px}
+  .dsite .s-loop{display:flex;flex-direction:column;gap:16px;width:759px}
+  .dsite .s-loop p{margin-top:0}
+  .dsite .s-cols{display:flex;gap:32px;font-size:14px;line-height:20px;color:#111}
+  .dsite .s-cols>div{width:200px;display:flex;flex-direction:column;gap:4px}
+  .dsite .s-cols b{font-family:"Albert Sans",sans-serif;font-weight:700;margin-bottom:12px}
+  .dsite .s-cols span{font-family:"DM Sans",sans-serif;opacity:.5;white-space:nowrap}
+  .dsite .s-legal-wrap{display:flex;flex-direction:column;gap:20px;padding:40px 0;margin-bottom:24px}
+  .dsite .s-legal,.dsite .s-copy{width:800px}
+  /* 모바일 390 */
+  .msite{width:390px}
+  .msite .s-head{height:60px;padding:0 16px}
+  .msite .s-head a{font-size:13px;min-width:48px;height:48px;display:flex;align-items:center}
+  .msite .s-head a:nth-child(2){justify-content:flex-end}
+  .msite .s-hero{height:844px;padding:16px}
+  .msite .s-hero-media{border-radius:6px;padding:40px 20px}
+  .msite .s-hero-media::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.2)}
+  .msite .s-hero h2{font-size:40px;z-index:1}
+  .msite .s-best{display:flex;flex-direction:column;gap:32px;padding:56px 16px}
+  .msite .s-title{gap:12px}
+  .msite .s-title h3{font-size:32px}
+  .msite .s-media{aspect-ratio:358/447.5;margin-bottom:-16px}
+  .msite .s-foot{padding:68px 16px 48px;display:flex;flex-direction:column;gap:40px}
+  .msite .s-loop{display:flex;flex-direction:column;gap:16px;padding-bottom:20px}
+  .msite .s-accs{border-bottom:1px solid rgba(17,17,17,.08)}
+  .msite .s-acc{display:flex;align-items:center;gap:24px;padding:16px 0;border-top:1px solid rgba(17,17,17,.08)}
+  .msite .s-acc span{flex:1;font-family:"DM Sans",sans-serif;font-weight:500;font-size:14px;line-height:20px}
+  .msite .s-acc img{transform:rotate(-90deg)}
+  .msite .s-legal-wrap{display:flex;flex-direction:column;gap:16px}
+  .msite .s-policy{margin-bottom:4px}
+  .msite .s-legal{font-size:11px;line-height:14px}
+
+  /* ---------- Shop 페이지 (Figma 3598:27073 데스크탑 / 3598:26749 모바일) ---------- */
+  .site .s-tabs{display:flex;flex-wrap:wrap;gap:8px}
+  .site .s-tabs span{padding:5px 13px;border:1px solid rgba(17,17,17,.15);border-radius:4px;font-size:13px;line-height:1.6;color:rgba(17,17,17,.6);white-space:nowrap}
+  .site .s-tabs span.on{background:#111;border-color:#111;color:#fff}
+  .site .s-total{display:flex;gap:4px;color:#3e3c38;line-height:1.6;white-space:nowrap}
+  .site .s-total span{opacity:.6}
+  .site .s-sort{display:flex;align-items:center;gap:4px;font-size:13px;line-height:1.6;color:#111;white-space:nowrap}
+  .site .s-grid{display:grid;align-items:start}
+  .site .s-grid .s-name{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .site .s-price{display:flex;align-items:baseline;gap:4px;white-space:nowrap}
+  .site .s-price del{color:#888;text-decoration:line-through;text-decoration-thickness:1px}
+  .dsite.shop .s-list{padding:120px 19px}
+  .dsite.shop .s-tabbar{display:flex;align-items:center;justify-content:space-between;padding:24px 0}
+  .dsite.shop .s-sortbar{display:flex;align-items:center;gap:20px}
+  .dsite.shop .s-total{font-size:14px}
+  .dsite.shop .s-vdiv{width:1px;height:14px;background:rgba(17,17,17,.1)}
+  .dsite.shop .s-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:56px 16px;padding-bottom:80px}
+  .dsite.shop .s-grid .s-name{display:block;white-space:nowrap}
+  .msite .s-status{position:relative;height:54px;background:#fff}
+  .msite .s-status span{position:absolute;left:0;width:138px;top:0;height:54px;display:flex;align-items:center;justify-content:center;padding-top:2px;font-family:-apple-system,"SF Pro Text",sans-serif;font-weight:600;font-size:17px;line-height:22px;color:#000}
+  .msite .s-status img{position:absolute;right:0;top:0}
+  .msite.shop .s-list{padding:80px 16px}
+  .msite.shop .s-tabbar{padding:12px 0}
+  .msite.shop .s-sortbar{display:flex;align-items:center;justify-content:space-between;padding:12px 4px}
+  .msite.shop .s-total{font-size:13px}
+  .msite.shop .s-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:40px 12px;padding:12px 0 40px;margin-bottom:40px}
+  .msite.shop .s-thumb{border-radius:6px}
+  .msite.shop .s-info{padding-top:12px}
+
+  /* ---------- 캔버스 텍스트 선택 (호버: 연한 파랑, 선택: #2E97FF) ---------- */
+  .sel-layer{position:absolute;inset:0;pointer-events:none;z-index:2}
+  .sel-box{position:absolute;display:none;box-sizing:border-box;pointer-events:none}
+  .sel-box.hover{border:1px solid rgba(46,151,255,.5);background:rgba(46,151,255,.04)}
+  .sel-box.picked{border:2px solid #2E97FF}
+  .sel-box.picked.pair{border-color:#97CBFF} /* 반대쪽 뷰(데스크탑↔모바일)의 같은 요소: 연한 파란색 */
+  .site [data-txt]{cursor:default}
+  .canvas.space .site [data-txt]{cursor:grab}
+  /* ---------- 텍스트 패널 (Figma 27:352225) ---------- */
+  .panel.tpanel{display:none;flex-direction:column;align-items:stretch;justify-content:flex-start;height:auto;width:280px;padding:0;color:#000;font-size:12px;
+    border-radius:12px;box-shadow:0 4px 10px rgba(65,78,97,.08)}
+  .app.has-sel .panel.tpanel{display:flex}
+  .tp-head{display:flex;align-items:center;gap:8px;height:52px;padding:16px 16px 16px 20px;flex:none}
+  .tp-head h3{flex:1;margin:0;font-size:14px;line-height:20px;font-weight:600;color:#000}
+  .tp-sync{width:24px;height:24px;padding:4px;border-radius:4px;background:#f5f8ff;display:flex;align-items:center;justify-content:center}
+  .tp-sync img{display:block}
+  .tp-sec{display:flex;flex-direction:column;gap:12px;padding:20px;border-bottom:1px solid rgba(51,62,76,.1)}
+  .tp-sec.tp-content{padding-top:8px}
+  /* 'AI 도움받기'(내용 섹션) 잠시 숨김 — 다시 보이려면 아래 두 줄 삭제 */
+  .tpanel .tp-content{display:none}
+  .tpanel .tp-style{padding-top:8px}
+  .tp-sec.tp-last{border-bottom:0}
+  .tp-label{margin:0;font-size:12px;line-height:18px;font-weight:600;color:#333e4c}
+  .tp-ai{display:flex;align-items:center;gap:6px;height:34px;padding:8px;border-radius:6px;border:1px solid transparent;text-align:left;
+    background:linear-gradient(90deg,rgba(27,78,254,.03),rgba(165,77,255,.03)) padding-box,linear-gradient(#fff,#fff) padding-box,linear-gradient(90deg,rgba(27,78,254,.4),rgba(165,77,255,.4)) border-box}
+  .tp-ai:hover{background:linear-gradient(90deg,rgba(27,78,254,.03),rgba(165,77,255,.03)) padding-box,linear-gradient(rgba(24,29,37,.04),rgba(24,29,37,.04)) padding-box,linear-gradient(#fff,#fff) padding-box,linear-gradient(90deg,rgba(27,78,254,.4),rgba(165,77,255,.4)) border-box}
+  .tp-ai img{display:block;width:18px;height:18px;flex:none}
+  .tp-ai .tp-chev{width:16px;height:16px}
+  .tp-ai span{flex:1;font-size:12px;line-height:18px;font-weight:500;color:#000;margin-left:-2px}
+  .tp-drop{display:flex;align-items:center;gap:6px;height:34px;padding:9px 9px 9px 12px;border:1px solid rgba(51,62,76,.1);border-radius:6px;text-align:left;font-size:12px;line-height:18px;color:#000}
+  .tp-drop span{flex:1}
+  .tp-drop img{display:block}
+  .tp-color{display:flex;align-items:center;gap:6px;height:34px;padding:9px 8px;border:1px solid rgba(51,62,76,.1);border-radius:6px;font-size:12px;line-height:18px}
+  .tp-color i{width:18px;height:18px;border-radius:4px;border:1px solid rgba(51,62,76,.16);background:#000;flex:none;box-sizing:border-box}
+  /* B안: 오른쪽 위 떠 있는 카드 / A안: 바 아래 오른쪽에 붙은 전체 높이 패널 (292px) */
+  .app[data-v="A"] .panel.tpanel{width:292px;border-radius:0}
+
+  /* 글자 편집 중 패널: 동기화 버튼·내용·스타일 대신 굵기·색상·링크 */
+  .tp-edit{display:none}
+  .app.editing .tp-edit{display:flex}
+  .app.editing .tpanel>.tp-sec:not(.tp-edit),.app.editing .tp-sync{display:none}
+  .tp-sec.tp-first{padding-top:8px}
+  .tp-sec.tp-link{gap:12px;border-bottom:0}
+  .tp-field{display:flex;align-items:center;height:34px;padding:8px 12px;border-radius:6px;background:#f6f7f9;cursor:text}
+  .tp-field input{flex:1;min-width:0;border:0;outline:0;background:none;padding:0;font:inherit;font-size:12px;line-height:18px;color:#000}
+  .tp-field input::placeholder{color:#99a0aa}
+  .tp-field:focus-within{box-shadow:inset 0 0 0 1px #181d25}
+  /* 캔버스 글자 편집 */
+  .site [data-txt][contenteditable="true"]{outline:none;cursor:text;caret-color:#2E97FF}
+
+  /* ---------- 섹션 선택 + 섹션 패널 (Figma 2655:516014 / 43:141818) ---------- */
+  .sel-box.sec{border:2px solid #2E97FF}
+  .panel.spanel{display:none;flex-direction:column;align-items:stretch;justify-content:flex-start;height:auto;width:280px;padding:0;color:#000;font-size:12px;border-radius:12px;box-shadow:0 4px 10px rgba(65,78,97,.08)}
+  .app.has-sec .panel.spanel{display:flex}
+  /* ---------- 헤더 패널 (Figma 3612:506674) ---------- */
+  .panel.hpanel{display:none;flex-direction:column;align-items:stretch;justify-content:flex-start;height:auto;width:280px;padding:0;color:#000;border-radius:12px;box-shadow:0 4px 10px rgba(65,78,97,.08)}
+  .app[data-v="A"] .panel.hpanel{width:292px;border-radius:0}
+  .app.has-sec.is-head .panel.spanel{display:none}
+  .app.has-sec.is-head .panel.hpanel{display:flex}
+  /* A안(오른쪽에 붙은 패널): 마지막 항목 아래 구분선 미노출 */
+  .app[data-v="A"] .panel > :last-child{border-bottom:0}
+  .hp-head{height:52px;display:flex;align-items:center;padding:16px 16px 16px 20px}
+  .hp-head h3{margin:0;font-size:14px;line-height:20px;font-weight:600;color:#000}
+  .hp-body{padding:5px 20px 20px;border-bottom:1px solid rgba(51,62,76,.1)}
+  .hp-edit{width:100%;height:40px;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px 16px;border:1px solid rgba(51,62,76,.16);border-radius:6px;background:#fff;font-size:12px;line-height:18px;font-weight:500;color:#000}
+  .hp-edit:hover{background:rgba(24,29,37,.04)}
+  .hp-edit img{display:block}
+  .app[data-v="A"] .panel.spanel{width:292px;border-radius:0}
+  .sp-more{width:24px;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center}
+  .sp-more:hover{background:rgba(24,29,37,.04)}
+  .sp-more img{display:block}
+  .sp-list{display:flex;flex-direction:column;gap:8px;padding:0 16px 16px}
+  .sp-item{display:flex;align-items:center;gap:4px;padding:9px;border:1px solid rgba(51,62,76,.1);border-radius:6px;text-align:left}
+  .sp-item[hidden]{display:none}
+  .sp-item:hover{background:rgba(24,29,37,.04)}
+  .sp-ic{width:32px;height:32px;border-radius:6px;background:#f6f7f9;display:flex;align-items:center;justify-content:center;flex:none}
+  .sp-ic img{display:block}
+  /* 배경 항목: 적용된 배경 이미지를 32px 상자에 미리보기 (Figma Frame 1739341055) */
+  .sp-ic{position:relative;overflow:hidden}
+  .sp-ic .sp-prev,.sp-ic .sp-prev-ovl{display:none;position:absolute;inset:0;width:100%;height:100%;border-radius:6px}
+  .sp-ic .sp-prev{object-fit:cover}
+  .sp-ic .sp-prev-ovl{background:#000;opacity:0;pointer-events:none}
+  .sp-ic.has-prev{box-shadow:inset 0 0 0 1px rgba(51,62,76,.1)}
+  .sp-ic.has-prev .sp-prev,.sp-ic.has-prev .sp-prev-ovl{display:block}
+  .sp-label{flex:1;margin-left:4px;font-size:12px;line-height:18px;font-weight:500;color:#000}
+  .sp-chev{display:block;flex:none}
+
+  /* ---------- 배경 패널 (Figma 27:353710) ---------- */
+  .panel.bpanel{display:none;flex-direction:column;align-items:stretch;justify-content:flex-start;height:auto;width:280px;padding:0;color:#000;font-size:12px;border-radius:12px;box-shadow:0 4px 10px rgba(65,78,97,.08)}
+  .app.has-sec.bg-open .panel.spanel{display:none}
+  .app.has-sec.bg-open .panel.bpanel{display:flex}
+  .app[data-v="A"] .panel.bpanel{width:292px;border-radius:0}
+  /* ---------- 레이아웃 패널 (Figma 2655-516049 / 2655-516085) ---------- */
+  .panel.lpanel{display:none;flex-direction:column;align-items:stretch;justify-content:flex-start;height:auto;width:280px;padding:0;color:#000;border-radius:12px;box-shadow:0 4px 10px rgba(65,78,97,.08)}
+  .app[data-v="A"] .panel.lpanel{width:292px;border-radius:0}
+  .app.has-sec.lay-open .panel.spanel{display:none}
+  .app.has-sec.lay-open .panel.lpanel{display:flex}
+  .lp-tabs{display:flex;gap:16px;padding:0 20px;height:34px;border-bottom:1px solid rgba(51,62,76,.1);flex:none}
+  .lp-tabs button{flex:1;height:34px;font-size:12px;line-height:18px;font-weight:400;color:#667080;border-bottom:2px solid transparent}
+  .lp-tabs button.on{font-weight:500;color:#000;border-bottom-color:#000}
+  .lp-pane{display:none}
+  .lpanel[data-tab="desk"] .lp-desk,.lpanel[data-tab="mob"] .lp-mob{display:block}
+  .lp-chips{display:flex;gap:6px;padding:20px 20px 0;overflow:hidden}
+  .lp-chip{min-width:40px;padding:4px 8px;border-radius:6px;background:#f6f7f9;color:#667080;font-size:12px;line-height:18px;font-weight:400;text-align:center;flex:none}
+  .lp-chip.on{background:#181d25;color:#fff;font-weight:600}
+  .lp-opts{display:flex;flex-wrap:wrap;gap:12px;padding:20px}
+  .lp-opt{width:240px;padding:2px;border-radius:6px}
+  .lp-opt.on{box-shadow:inset 0 0 0 1.5px #1a66ff}
+  .lp-prev{height:133px;background:#fff;border:1px solid rgba(51,62,76,.16);border-radius:6px}
+  .lp-mob .lp-opt{width:114px}
+  .lpanel.compact .lp-chips{display:none}
+  .lpanel.compact .lp-desk .lp-opt:nth-child(n+3),.lpanel.compact .lp-mob .lp-opt:nth-child(n+2){display:none}
+  .lp-mob .lp-prev{height:196px}
+  /* ---------- 색상 패널 (Figma 2655-506334 / 2655-508720) ---------- */
+  .panel.cpanel{display:none;flex-direction:column;align-items:stretch;justify-content:flex-start;height:auto;width:280px;padding:0;color:#000;border-radius:12px;box-shadow:0 4px 10px rgba(65,78,97,.08)}
+  .app[data-v="A"] .panel.cpanel{width:292px;border-radius:0}
+  .app.has-sec.col-open .panel.spanel{display:none}
+  .app.has-sec.col-open .panel.cpanel{display:flex}
+  .cp-sec{display:flex;flex-direction:column;gap:20px;padding:8px 20px 20px}
+  .cp-title{display:none;margin:0;font-size:12px;line-height:18px;font-weight:600;color:#333e4c}
+  .cp-group{display:flex;flex-direction:column;gap:8px}
+  .cp-opt{display:block;width:100%;padding:2px;border-radius:6px;text-align:left}
+  .cp-opt.on{box-shadow:inset 0 0 0 1.5px #1a66ff}
+  .cp-prev{position:relative;display:flex;align-items:center;gap:16px;height:44px;padding:0 12px;border-radius:6px;overflow:hidden;background:#fff}
+  .cp-prev::after{content:"";position:absolute;inset:0;border:1px solid rgba(51,62,76,.16);border-radius:6px;pointer-events:none}
+  .cp-gray{background:#eff1f4}
+  .cp-dark{background:#14110f;color:#fff}
+  .cp-sw{position:relative;display:flex;align-items:center;gap:6px;font-size:12px;line-height:18px;font-weight:500}
+  .cp-sw i{width:16px;height:16px;border-radius:50%;flex:none}
+  .cp-sw em{font-style:normal}
+  .cp-media{height:60px}
+  .cp-img{position:absolute;left:calc(50% + .5px);top:calc(50% - 64.5px);width:235px;height:357px;transform:translate(-50%,-50%);object-fit:cover}
+  .cp-dim{position:absolute;inset:0}
+  .cp-light{color:#fff}
+  .cp-desc{position:relative;display:flex;flex-direction:column;gap:2px;white-space:nowrap}
+  .cp-desc b{font-size:12px;line-height:18px;font-weight:600}
+  .cp-desc small{font-size:11px;line-height:14px;font-weight:400;color:#414e61}
+  .cp-light .cp-desc small{color:rgba(255,255,255,.8)}
+  .cp-note{margin:0;font-size:11px;line-height:14px;color:#667080}
+  .cp-note u{text-underline-position:from-font}
+  .cp-onmedia{display:none}
+  /* Main 첫 번째 섹션: 제목 표시, Scheme 아래 구분선, on-media 섹션 추가 */
+  .cpanel.media .cp-title{display:block}
+  .cpanel.media .cp-scheme{gap:12px;padding-bottom:20px;border-bottom:1px solid rgba(51,62,76,.1)}
+  .cpanel.media .cp-scheme .cp-note{display:none}
+  .cpanel.media .cp-onmedia{display:flex;padding-top:20px}
+  .cpanel.media .cp-onmedia .cp-title + .cp-group{margin-top:-8px}
+  /* ---------- 애니메이션 패널 (Figma 3342-306377) ---------- */
+  .panel.apanel{display:none;flex-direction:column;align-items:stretch;justify-content:flex-start;height:auto;width:280px;padding:0;color:#000;border-radius:12px;box-shadow:0 4px 10px rgba(65,78,97,.08)}
+  .app[data-v="A"] .panel.apanel{width:292px;border-radius:0}
+  .app.has-sec.ani-open .panel.spanel{display:none}
+  .app.has-sec.ani-open .panel.apanel{display:flex}
+  /* ---------- 구성 요소 패널 (Figma 3311-665690) ---------- */
+  .panel.opanel{display:none;flex-direction:column;align-items:stretch;justify-content:flex-start;height:auto;width:280px;padding:0;color:#000;border-radius:12px;box-shadow:0 4px 10px rgba(65,78,97,.08)}
+  .app[data-v="A"] .panel.opanel{width:292px;border-radius:0}
+  .app.has-sec.obj-open .panel.spanel{display:none}
+  .app.has-sec.obj-open .panel.opanel{display:flex}
+  .op-group{padding-bottom:8px}
+  .op-group + .op-group{padding-top:8px;border-top:1px solid rgba(51,62,76,.1)}
+  .op-tab{margin:0;height:34px;padding:0 20px;display:flex;align-items:center;font-size:12px;line-height:18px;color:#667080}
+  .op-list{display:flex;flex-direction:column;padding:0 8px}
+  .op-item{display:flex;align-items:center;gap:8px;height:38px;padding:10px 12px;border-radius:6px;text-align:left;font-size:12px;line-height:18px;color:#000}
+  .op-item:hover{background:rgba(24,29,37,.04)}
+  .op-item img{display:block;flex:none}
+  .op-item span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .op-add{color:#1a66ff}
+  /* ---------- 요소 선택 패널: 미디어(27-873129) / 상품(1168-378233) / 카테고리(3612-507069·507123) ---------- */
+  .panel.mpanel,.panel.ppanel,.panel.gpanel{display:none;flex-direction:column;align-items:stretch;justify-content:flex-start;height:auto;width:280px;padding:0;color:#000;border-radius:12px;box-shadow:0 4px 10px rgba(65,78,97,.08)}
+  .app[data-v="A"] .panel:is(.mpanel,.ppanel,.gpanel){width:292px;border-radius:0}
+  .app.has-obj[data-obj="image"] .panel.mpanel,.app.has-obj[data-obj="product"] .panel.ppanel,.app.has-obj[data-obj="productList"] .panel.gpanel{display:flex}
+  .mp-drops{display:flex;gap:8px}
+  .mp-drops .tp-drop{flex:1;min-width:0;padding:9px}
+  .mp-drops .tp-drop span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pp-sec{display:flex;flex-direction:column;gap:12px;padding-top:1px}
+  .pp-title{display:flex;align-items:center;gap:16px;padding:0 20px}
+  .pp-title .tp-label{flex:1}
+  .pp-edit{height:32px;padding:7px 13px;border:1px solid rgba(51,62,76,.16);border-radius:8px;font-size:12px;line-height:18px;font-weight:500;color:#000}
+  .pp-edit:hover{background:rgba(24,29,37,.04)}
+  .pp-list{display:flex;flex-direction:column;padding-bottom:14px;max-height:320px;overflow-y:auto}
+  .pp-row{display:flex;align-items:center;gap:8px;padding:6px 20px;font-size:12px;line-height:18px}
+  .pp-row img{width:40px;height:40px;border-radius:4px;object-fit:cover;flex:none;display:block}
+  .pp-row span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pc-sec{display:flex;flex-direction:column;gap:8px;padding:8px 0 8px;border-bottom:1px solid rgba(51,62,76,.1)}
+  .pc-sec .tp-label{padding:0 20px}
+  .pc-list{display:flex;flex-direction:column}
+  .pc-item{display:flex;align-items:center;gap:4px;height:44px;padding:0 20px;font-size:12px;line-height:18px;cursor:pointer}
+  .pc-item input{position:absolute;opacity:0;pointer-events:none}
+  .pc-box{position:relative;width:18px;height:18px;flex:none}
+  .pc-box::before{content:"";position:absolute;left:1.8px;top:1.8px;width:14.4px;height:14.4px;border-radius:1.8px;box-sizing:border-box;border:1.5px solid #99a0aa}
+  .pc-box img{position:absolute;inset:0;display:none}
+  .pc-item input:checked + .pc-box::before{background:#000;border:0}
+  .pc-item input:checked + .pc-box img{display:block}
+  .pc-all{display:flex;flex-direction:column;gap:12px;padding:20px 0}
+  .pc-all-title{display:flex;align-items:center;gap:16px;padding:0 20px}
+  .pc-all-title .tp-label{flex:1}
+  .pc-switch{display:flex;width:28px;height:16px}
+  .pc-switch img{display:block}
+  .pc-all-body{display:none;flex-direction:column;gap:20px;padding:0 20px}
+  .gpanel.all-on .pc-all-body{display:flex}
+  .pc-field{display:flex;flex-direction:column;gap:6px}
+  .pc-field p{margin:0;font-size:11px;line-height:14px;font-weight:500;color:#667080}
+  /* ---------- 미리보기 (Figma 3395:517205) ---------- */
+  .preview{position:absolute;inset:0;z-index:100;display:flex;flex-direction:column;background:#fff}
+  .preview[hidden]{display:none}
+  .pv-banner{flex:none;height:48px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:16px;padding:8px 20px;background:#000;border-bottom:1px solid #333e4c}
+  .pv-state{display:flex;align-items:center;gap:4px;font-size:14px;line-height:20px;color:#fff}
+  .pv-state b{font-weight:500}
+  .pv-state img{display:block}
+  .pv-banner i{width:1px;height:14px;background:rgba(255,255,255,.3)}
+  .pv-msg{font-size:14px;line-height:20px;color:#e0e2e6}
+  .pv-screen{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+  .pv-screen::-webkit-scrollbar{display:none}
+  .pv-fit{position:relative;overflow:hidden}
+  .pv-fit .site{display:block;position:absolute;left:0;top:0;transform-origin:0 0}
+  .bp-head{display:flex;align-items:center;gap:8px;height:52px;padding:16px;flex:none}
+  .bp-head h3{flex:1;margin:0;font-size:14px;line-height:20px;font-weight:600}
+  .bp-back{width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:4px}
+  .bp-back img{display:block}
+  .bp-media{display:flex;flex-direction:column;gap:12px;padding:5px 20px 20px;border-bottom:1px solid rgba(51,62,76,.1)}
+  .bp-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:-3px}
+  .bp-seg{display:flex;height:36px;padding:4px;border-radius:8px;background:#f6f7f9}
+  .bp-seg button{flex:1;height:28px;border-radius:6px;font-size:12px;line-height:18px;color:#667080}
+  .bp-seg button.on{background:#fff;color:#000;font-weight:500;box-shadow:0 1px .5px rgba(65,78,97,.08),0 2px 4px rgba(65,78,97,.16)}
+  .bp-item{border:1px solid rgba(51,62,76,.1);border-radius:6px;padding:1px;overflow:hidden;background:#fff}
+  .bp-thumb{aspect-ratio:238/134;display:flex;align-items:center;justify-content:center;background:url(assets/bg-checker.png) 0 0/258px 126.1px;border-radius:5px 5px 0 0;overflow:hidden}
+  .bp-thumb img{width:134px;height:134px;object-fit:cover;display:block}
+  .bp-thumb img:not([src]),.bp-thumb img[src=""]{visibility:hidden}
+  .bp-meta{display:flex;flex-direction:column;gap:16px;padding:11px 9px 8px}
+  .bp-file{margin:0;padding-left:6px;font-size:11px;line-height:14px;color:#667080;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bp-btns{display:flex;align-items:center;justify-content:space-between;height:24px}
+  .bp-tbtns,.bp-ibtns{display:flex;align-items:center;gap:4px}
+  .bp-tbtns button{height:24px;padding:3px 6px;border-radius:4px;font-size:12px;line-height:18px;font-weight:500;color:#333e4c}
+  .bp-tbtns i{width:1px;height:12px;background:rgba(0,0,0,.12)}
+  .bp-ibtns button{width:24px;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center}
+  .bp-tbtns button:hover,.bp-ibtns button:hover{background:rgba(24,29,37,.04)}
+  .bp-ibtns img{display:block}
+  .bp-ovl{display:flex;flex-direction:column;gap:6px;padding:6px 0}
+  .bp-ovl-title{display:flex;align-items:center;justify-content:space-between;font-size:11px;line-height:14px;font-weight:500;color:#667080}
+  .bp-val{display:flex;gap:2px;min-width:34px;justify-content:flex-end;padding:2px 4px}
+  .bp-val b{font-weight:400;color:#333e4c}
+  .bp-ovl-row{display:flex;align-items:center;gap:8px}
+  .bp-chip{width:20px;height:20px;padding:1px;border:1px solid rgba(51,62,76,.16);border-radius:4px;box-sizing:border-box;display:flex;flex:none}
+  .bp-chip i{flex:1;border-radius:3px;background:#000}
+  .bp-slider{position:relative;flex:1;height:20px;cursor:pointer;touch-action:none}
+  .bp-track{position:absolute;left:0;right:0;top:9px;height:2px;border-radius:100px;background:#e4e6e9}
+  .bp-fill{position:absolute;left:0;top:9px;height:2px;border-radius:100px;background:#181d25;width:0}
+  .bp-knob{position:absolute;top:5px;width:10px;height:10px;margin-left:-5px;left:0;border-radius:100px;background:#181d25;box-shadow:0 1px 8px rgba(65,78,97,.16),0 2px 24px rgba(65,78,97,.2)}
+  .bp-link{border-bottom:0}
+  /* 오버레이: 선택한 섹션 위에 검정 막 */
+  .site .s-ovl{position:absolute;inset:0;background:#000;pointer-events:none;z-index:1}
+</style>
+</head>
+<body>
+
+<div class="demo">
+  <span class="lbl">시안</span>
+  <div class="seg" id="vSeg">
+    <button data-v="A">A안</button>
+    <button data-v="B" class="on">B안</button>
+    <!-- C안(상하 분리): 데모에서는 숨김 -->
+    <button data-v="C">C안</button>
+  </div>
+  <span class="lbl">편집 중인 디자인</span>
+  <div class="seg" id="aSeg">
+    <button data-a="true" class="on">적용 중</button>
+    <button data-a="false">미적용</button>
+  </div>
+  <button class="simbtn" id="sim">✎ 편집해 보기</button>
+  <p class="desc" id="desc"></p>
+</div>
+
+<div class="app" id="app" data-v="B" data-applied="true" data-dname="on">
+
+  <!-- A안: 고정 바 (Figma 3590:23188). B안과 같은 부품을 옮겨 와서 동작도 같음 -->
+  <div class="tb tb-A top">
+    <div class="grp left">
+      <i class="anchor" data-for="exit" hidden></i>
+      <span class="div a-div"></span>
+      <i class="anchor" data-for="style" hidden></i>
+    </div>
+    <i class="anchor" data-for="page" hidden></i>
+    <div class="grp right">
+      <i class="anchor" data-for="hist" hidden></i>
+      <i class="anchor" data-for="mirror" hidden></i>
+    </div>
+  </div>
+  <div class="tb tb-A bottomleft bottom">
+    <i class="anchor" data-for="credit" hidden></i>
+    <!-- A안 확대/축소 (Figma 3590:22896): 크레딧 오른쪽, 확대·축소 버튼 + 배율 메뉴 -->
+    <div class="zbar">
+      <button class="zb-ib" data-zstep="in" data-tip="확대" aria-label="확대"><img src="assets/zoom-in.svg" width="14" height="14" alt=""></button>
+      <button class="zb-ib" data-zstep="out" data-tip="축소" aria-label="축소"><img src="assets/zoom-out.svg" width="14" height="14" alt=""></button>
+      <span class="zb-div"></span>
+      <div class="zoom" data-dir="up"></div>
+    </div>
+  </div>
+
+  <!-- B안 (Figma 3395:522408 기준) -->
+  <div class="tb tb-B">
+    <div class="side">
+      <div class="box" data-part="exit"><button class="ib" data-tip="디자인 편집 나가기"><img class="fi" src="assets/exit.svg" width="16" height="16" alt=""></button></div>
+      <i class="anchor" data-for="exit" hidden></i>
+      <div class="box dn" data-part="dname"><button class="sel"><span class="dot"></span><span class="dname">디자인 20261119</span><span class="badge"></span></button></div>
+      <i class="anchor" data-for="dname" hidden></i>
+      <div class="box" data-part="style"><button class="tbtn"><img class="fi" src="assets/theme.svg" width="16" height="16" alt="">공통 스타일</button></div>
+      <i class="anchor" data-for="style" hidden></i>
+    </div>
+    <div class="center box pagewrap" data-part="page">
+      <button class="pagesel2" id="pageBtn"><img class="fi" src="assets/home.svg" width="16" height="16" alt=""><span>Main</span><img class="fi" src="assets/chevron-page.svg" width="16" height="16" alt=""></button>
+      <div class="pagemenu" id="pageMenu">
+        <div class="pm-sec"><div class="pm-title"><span>콘텐츠 페이지</span><button class="pm-add" data-tip="페이지 추가"><img src="assets/menu-plus.svg" width="16" height="16" alt=""></button></div><div class="pm-list"><div class="pm-item on" role="button" tabindex="0" data-icon="home" data-key="main"><img class="pi" src="assets/menu-home.svg" width="16" height="16" alt=""><span class="pl">Main</span></div><div class="pm-item drag" role="button" tabindex="0" data-icon="page" data-key="shop"><span class="pm-dots"><img src="assets/menu-reorder.svg" width="18" height="18" alt=""></span><img class="pi" src="assets/menu-page.svg" width="16" height="16" alt=""><span class="pl">Shop</span><button class="pm-more" aria-label="더보기"><img src="assets/menu-overflow.svg" width="16" height="16" alt=""></button></div><div class="pm-item drag" role="button" tabindex="0" data-icon="page" data-key="about"><span class="pm-dots"><img src="assets/menu-reorder.svg" width="18" height="18" alt=""></span><img class="pi" src="assets/menu-page.svg" width="16" height="16" alt=""><span class="pl">About</span><button class="pm-more" aria-label="더보기"><img src="assets/menu-overflow.svg" width="16" height="16" alt=""></button></div></div></div>
+        <div class="pm-sec"><div class="pm-title"><span>시스템 페이지</span><span class="pm-add ghost"></span></div><div class="pm-list"><div class="pm-item" role="button" tabindex="0" data-icon="product"><img class="pi" src="assets/menu-product.svg" width="16" height="16" alt=""><span class="pl">상품 상세</span></div><div class="pm-item" role="button" tabindex="0" data-icon="cart"><img class="pi" src="assets/menu-cart.svg" width="16" height="16" alt=""><span class="pl">장바구니</span></div><div class="pm-item" role="button" tabindex="0" data-icon="customer"><img class="pi" src="assets/menu-customer.svg" width="16" height="16" alt=""><span class="pl">마이페이지</span></div><div class="pm-item" role="button" tabindex="0" data-icon="logout"><img class="pi" src="assets/menu-logout.svg" width="16" height="16" alt=""><span class="pl">로그인</span></div><div class="pm-item" role="button" tabindex="0" data-icon="search"><img class="pi" src="assets/menu-search.svg" width="16" height="16" alt=""><span class="pl">상품 검색</span></div></div></div>
+        <div class="pm-pop" id="pmPop">
+          <button class="pm-pop-item" data-act="rename"><img src="assets/menu-setting.svg" width="18" height="18" alt=""><span>페이지 설정</span></button>
+          <button class="pm-pop-item danger" data-act="delete"><img src="assets/menu-delete.svg" width="18" height="18" alt=""><span>삭제</span></button>
+        </div>
+      </div>
+    </div>
+    <i class="anchor" data-for="page" hidden></i>
+    <div class="side">
+      <div class="box hist" data-part="hist">
+        <span class="save live iconmode cloudmode" data-state="saved"></span>
+        <button class="ib" data-tip="실행 취소"><img class="fi" src="assets/undo.svg" width="20" height="20" alt=""></button>
+        <button class="ib dim" data-tip="다시 실행"><img class="fi" src="assets/redo.svg" width="20" height="20" alt=""></button>
+        <span class="div"></span>
+        <div class="zoom" data-dir="down"></div>
+      </div>
+      <i class="anchor" data-for="hist" hidden></i>
+      <div class="box mirror-box" data-part="mirror">
+        <button class="ib pv" data-tip="미리보기" aria-label="미리보기"><img class="fi" src="assets/preview.svg" width="20" height="20" alt=""><span class="lbl-b">미리보기</span></button>
+        <span class="div"></span>
+        <button class="ib has-rtip" id="mirrorBtn" aria-label="미러링" aria-describedby="mirrorTip" aria-haspopup="dialog" aria-expanded="false"><img class="fi" src="assets/mirroring.svg" width="20" height="20" alt=""><span class="m-spin" aria-hidden="true"></span><span class="lbl-b">미러링</span><span class="rtip" id="mirrorTip" role="tooltip"><span class="rtip-title">미러링</span><span class="rtip-desc">PC에서 편집 중인 화면을 모바일에서 실시간으로 확인할 수 있어요.</span></span></button>
+        <button class="cta update">업데이트</button>
+        <div class="mirror-pop" id="mirrorPop" role="dialog" aria-labelledby="mirrorTitle">
+          <div class="mp-head"><h3 id="mirrorTitle">미러링</h3></div>
+          <div class="mp-body"><p>Tesso 앱 실행 후 아래 버튼을 눌러 주세요.</p></div>
+          <div class="mp-actions">
+            <button class="mp-primary" id="mirrorStart">모바일 앱에서 미러링</button>
+            <button class="mp-help"><img src="assets/question.svg" width="16" height="16" alt=""><span>Tesso 앱이 없으신가요?</span></button>
+          </div>
+        </div>
+      </div>
+      <i class="anchor" data-for="mirror" hidden></i>
+    </div>
+  </div>
+  <div class="tb tb-B bottomleft bottom">
+    <div class="credit-wrap" data-part="credit">
+    <button class="credit2" id="creditBtn" data-tip="보유 크레딧"><img class="fi" src="assets/credit.svg" width="16" height="16" alt=""><span>10,000</span></button>
+    <!-- 크레딧 선택 시 (Figma 3439:638092) -->
+    <div class="credit-card" id="creditCard">
+      <div class="cc-title">
+        <span class="cc-avatar"><img src="assets/avatar.png" width="32" height="32" alt=""></span>
+        <span class="cc-text"><span class="cc-name">젠틀몬스터</span><span class="cc-plan">Pro</span></span>
+      </div>
+      <div class="cc-row">
+        <button class="cc-amount" id="creditClose"><img src="assets/credit.svg" width="16" height="16" alt=""><span>10,000</span></button>
+        <button class="cc-charge">충전</button>
+      </div>
+    </div>
+    </div>
+    <i class="anchor" data-for="credit" hidden></i>
+  </div>
+
+  <!-- C안: B안과 같은 부품(Figma 3395:522408)을 위·아래로 나눠 배치 -->
+  <div class="tb tb-C top">
+    <div class="side">
+      <div class="bgroup">
+        <i class="anchor" data-for="exit" hidden></i>
+        <span class="div dn bg-div"></span>
+        <i class="anchor" data-for="dname" hidden></i>
+        <span class="slash dn" aria-hidden="true"></span>
+        <i class="anchor" data-for="page" hidden></i>
+      </div>
+      <i class="anchor" data-for="style" hidden></i>
+    </div>
+    <div class="side">
+      <i class="anchor" data-for="mirror" hidden></i>
+    </div>
+  </div>
+  <!-- C안 하단: 좌측에 크레딧 · 실행취소/줌 -->
+  <div class="tb tb-C bottomleft bottom">
+    <i class="anchor" data-for="credit" hidden></i>
+    <i class="anchor" data-for="hist" hidden></i>
+  </div>
+
+  <!-- 미리보기 화면 (Figma 3395:517205): 상단 배너 + 현재 페이지 데스크탑 화면을 창 너비에 맞춰 표시, Esc로 닫기 -->
+  <div class="preview" id="preview" hidden>
+    <div class="pv-banner"><span class="pv-state"><img src="assets/preview-eye.svg" width="20" height="20" alt=""><b>미리보기</b></span><i></i><span class="pv-msg">이 페이지는 미리보기용 사이트입니다.</span></div>
+    <div class="pv-screen" id="pvScreen"><div class="pv-fit" id="pvFit"></div></div>
+  </div>
+
+  <!-- 스낵바 (Figma Tool-Bar 5:8693): 에디팅 영역 상단 16px, 가운데 -->
+  <div class="snackbar" id="snackbar" role="status" aria-live="polite"></div>
+
+  <!-- C안 미러링 안내: Dim + 화면 정중앙 다이얼로그 (열릴 때 미러링 팝업을 이 안으로 옮김) -->
+  <div class="mp-dim" id="mpDim"></div>
+
+  <!-- C안 모바일 프레임 미러링 버튼 툴팁 (Figma 3632:499867) -->
+  <div class="fb-tip" id="fbMirrorTip" role="tooltip"><b>미러링</b><span>PC에서 편집 중인 화면을 모바일에서 실시간으로 확인할 수 있어요.</span></div>
+
+  <!-- 페이지 설정 다이얼로그 (Figma 3590:22706) -->
+  <div class="ps-dim" id="psDim">
+    <div class="ps-dialog" role="dialog" aria-modal="true" aria-labelledby="psTitle">
+      <div class="ps-head"><h3 id="psTitle">페이지 설정</h3><button class="ps-close" id="psClose" aria-label="닫기"><img src="assets/close.svg" width="20" height="20" alt=""></button></div>
+      <div class="ps-body">
+        <div class="ps-field">
+          <label class="ps-label" for="psName">페이지 이름</label>
+          <div class="ps-input"><input id="psName" maxlength="50" autocomplete="off" placeholder="페이지 이름"></div>
+          <div class="ps-help"><span>에디터에서만 표시돼요. 실제 사이트에서 보이는 메뉴는 헤더 편집에서 설정할 수 있어요.</span><span class="ps-count" id="psNameCount">0/50</span></div>
+        </div>
+        <div class="ps-field">
+          <label class="ps-label" for="psSlug">하위 주소</label>
+          <div class="ps-input"><span class="ps-prefix">/</span><input id="psSlug" maxlength="50" autocomplete="off" placeholder="About, Shop 등"></div>
+          <div class="ps-help"><span>사이트 주소 뒤에 표시되는 페이지의 URL이에요</span><span class="ps-count" id="psSlugCount">0/50</span></div>
+        </div>
+      </div>
+      <div class="ps-actions"><button class="ps-save" id="psSave" disabled>저장</button></div>
+    </div>
+  </div>
+  <!-- 캔버스 -->
+  <div class="canvas">
+    <div class="frames">
+      <div class="frame desk">
+        <div class="bar"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/></svg><button class="fb-btn" id="framePreview" data-tip="미리보기" aria-label="미리보기"><img src="assets/frame-preview.svg" width="16" height="16" alt=""></button>데스크탑</div>
+        <div class="view site-view">
+          <div class="ph site-ph"><i style="height:44px"></i><i style="height:320px"></i><i style="height:22px;width:40%"></i><i style="height:180px"></i><i style="height:180px"></i></div>
+          <!-- Shop 페이지 데스크탑 (Figma 3598:27073) -->
+          <div class="site dsite shop" data-w="1920" data-key="shop">
+            <header class="s-head"><nav><a>Shop</a><a>About</a><a>Journal</a><a>Support</a></nav><nav><a>Search</a><a>Sign in</a><a>Bag [0]</a></nav><b class="s-brand">BRAND</b></header>
+            <section class="s-list">
+              <div class="s-tabbar"><div class="s-tabs"><span class="on">EXCLUSIVE</span><span>STATIONERY</span><span>LIFESTYLE</span></div><div class="s-sortbar"><div class="s-total"><span>상품</span><span class="en">9999</span></div><i class="s-vdiv"></i><div class="s-sort"><span>최신순</span><img src="assets/main/chevron-down.svg" width="20" height="20" alt=""></div></div></div>
+              <div class="s-grid" data-layer="productList"><div class="s-card"><div class="s-thumb"><img src="assets/main/product-thumb.png" alt=""></div><div class="s-info"><p class="s-name">혜괴 문방사우 책갈피</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p2.png" alt=""></div><div class="s-info"><p class="s-name">호이오 도자기 나뭇잎</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p3.png" alt=""></div><div class="s-info"><p class="s-name">수직제작소 미니멀 펜 레스트</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p4.png" alt=""></div><div class="s-info"><p class="s-name">혜괴 벌레먹은 잎 이케바나 홀더</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p5.png" alt=""></div><div class="s-info"><p class="s-name">UNNAMED DAYS</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p6.png" alt=""></div><div class="s-info"><p class="s-name">프로퍼빌롱잉즈 DANTE Layered Binder Wallet (mini) Natural</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p7.png" alt=""></div><div class="s-info"><p class="s-name">AEHO 블루라인 웨이브머그</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p8.png" alt=""></div><div class="s-info"><p class="s-name">AEHO 블루림 흑임자볼</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div></div>
+            </section>
+            <footer class="s-foot">
+              <div class="s-foot-top">
+                <div class="s-loop" data-layer="textBlock"><h4 data-layer="title">Stay in the loop</h4><p data-layer="description">In posuere dapibus urna, bibendum efficitur sapien consectetur id.<br>Morbi et scelerisque lorem, eu feugiat arcu.</p></div>
+                <div class="s-cols">
+                  <div><b>SOCIAL</b><span>Facebook</span><span>Instagram</span><span>Linkedln</span><span>Pinterest</span><span>TikTok</span></div>
+                  <div><b>ABOUT</b><span>Our Story</span><span>Brand Name Society</span><span>Careers</span><span>Press</span><span>Sales &amp; Showroom</span></div>
+                  <div><b>HELP</b><span>FAQs</span><span>Contact</span><span>Shipping &amp; Delivery</span><span>Store Finder</span><span>Size Guides</span></div>
+                  <div><b>INFORMATION</b><span>Privacy Policy</span><span>Cookie Policy</span><span>Terms of Service</span><span>Membership</span><span>How We Care</span></div>
+                </div>
+              </div>
+              <div class="s-legal-wrap"><div class="s-policy"><b>이용약관</b><b>개인정보처리방침</b></div><div class="s-legal"><span>상호: OOOO</span><i></i><span>대표: OOO</span><i></i><span>개인정보관리책임자: OOO</span><i></i><span>전화: 000-0000-0000</span><i></i><span>이메일: business@email.com</span><i></i><span>주소: OOOO OOOO OOOO</span><i></i><span>사업자등록번호: 000-00-00000 (<u>사업자정보확인</u>)</span><i></i><span>통신판매: 제0000-서울마포-0000호</span><i></i><span>호스팅제공자: 팀울트라(주)</span></div><p class="s-copy">© Copyright OOOO. All Rights Reserved.</p></div>
+            </footer>
+          </div>
+          <!-- About 페이지 데스크탑 (Figma 3602:27709) -->
+          <div class="site dsite about" data-w="1920" data-key="about">
+            <header class="s-head"><nav><a>Shop</a><a>About</a><a>Journal</a><a>Support</a></nav><nav><a>Search</a><a>Sign in</a><a>Bag [0]</a></nav><b class="s-brand">BRAND</b></header>
+            <section class="s-intro"><div class="s-intro-tb" data-layer="textBlock"><h2 data-layer="title">We Believe Depth Lasts Longer</h2><p data-layer="description">굿모닝제너럴스토어는 일상에 필요한 기본적인 제품부터 필수적이진않지만 더나은 삶을위한 제품까지,영감을 더하여 판매하는 상점입니다.<br>건강한 라이프스타일이 자신감 있는 삶의 기본이라고 생각하며 물건을 통해 가치와 스토리를 함께 전달합니다.</p></div></section>
+            <section class="s-story"><div class="s-story-media" data-layer="image"><img src="assets/main/about-media.png" alt=""></div><div class="s-story-box"><div class="s-story-tb" data-layer="textBlock"><h3 data-layer="title">DO SMALL THINGS<br>WITH GREAT LOVE.</h3><p data-layer="description">가치 있는 삶과 행복을 추구하고 싶은 욕구와 욕망, 이것은 변하지 않는다고 믿습니다.<br>행복이란 늘 가까이에 있지만 그것을 끊임없이 관찰하고 발견해야 비로소 느낄 수 있습니다.</p></div></div></section>
+            <footer class="s-foot">
+              <div class="s-foot-top">
+                <div class="s-loop" data-layer="textBlock"><h4 data-layer="title">Stay in the loop</h4><p data-layer="description">In posuere dapibus urna, bibendum efficitur sapien consectetur id.<br>Morbi et scelerisque lorem, eu feugiat arcu.</p></div>
+                <div class="s-cols">
+                  <div><b>SOCIAL</b><span>Facebook</span><span>Instagram</span><span>Linkedln</span><span>Pinterest</span><span>TikTok</span></div>
+                  <div><b>ABOUT</b><span>Our Story</span><span>Brand Name Society</span><span>Careers</span><span>Press</span><span>Sales &amp; Showroom</span></div>
+                  <div><b>HELP</b><span>FAQs</span><span>Contact</span><span>Shipping &amp; Delivery</span><span>Store Finder</span><span>Size Guides</span></div>
+                  <div><b>INFORMATION</b><span>Privacy Policy</span><span>Cookie Policy</span><span>Terms of Service</span><span>Membership</span><span>How We Care</span></div>
+                </div>
+              </div>
+              <div class="s-legal-wrap"><div class="s-policy"><b>이용약관</b><b>개인정보처리방침</b></div><div class="s-legal"><span>상호: OOOO</span><i></i><span>대표: OOO</span><i></i><span>개인정보관리책임자: OOO</span><i></i><span>전화: 000-0000-0000</span><i></i><span>이메일: business@email.com</span><i></i><span>주소: OOOO OOOO OOOO</span><i></i><span>사업자등록번호: 000-00-00000 (<u>사업자정보확인</u>)</span><i></i><span>통신판매: 제0000-서울마포-0000호</span><i></i><span>호스팅제공자: 팀울트라(주)</span></div><p class="s-copy">© Copyright OOOO. All Rights Reserved.</p></div>
+            </footer>
+          </div>
+          <!-- Main 페이지 데스크탑 (Figma 3598:23976, 1920px 원본을 프레임 너비로 축소) -->
+          <div class="site dsite" data-w="1920" data-key="main">
+            <header class="s-head"><nav><a>Shop</a><a>About</a><a>Journal</a><a>Support</a></nav><nav><a>Search</a><a>Sign in</a><a>Bag [0]</a></nav><b class="s-brand">BRAND</b></header>
+            <section class="s-hero"><div class="s-hero-media"><img src="assets/main/hero.png" alt=""><div class="s-tb" data-layer="textBlock"><h2 data-layer="title">2027 DIARY COLLECTION</h2></div></div></section>
+            <section class="s-best">
+              <div class="s-title" data-layer="textBlock"><h3 data-layer="title">Best Sellers</h3><p data-layer="description">쓰임에 작은 즐거움을 더해 제안하는 GMGS Paper Products를 만나보세요.</p></div>
+              <div class="s-best-row">
+                <div class="s-card" data-layer="product"><div class="s-thumb"><img src="assets/main/product-thumb.png" alt=""></div><div class="s-info"><p class="s-name">혜괴 문방사우 책갈피</p><p class="s-price"><span class="en">68,000</span>원</p></div></div>
+                <div class="s-media" data-layer="image"><img src="assets/main/bestseller-media.png" alt=""></div>
+              </div>
+            </section>
+            <footer class="s-foot">
+              <div class="s-foot-top">
+                <div class="s-loop" data-layer="textBlock"><h4 data-layer="title">Stay in the loop</h4><p data-layer="description">In posuere dapibus urna, bibendum efficitur sapien consectetur id.<br>Morbi et scelerisque lorem, eu feugiat arcu.</p></div>
+                <div class="s-cols">
+                  <div><b>SOCIAL</b><span>Facebook</span><span>Instagram</span><span>Linkedln</span><span>Pinterest</span><span>TikTok</span></div>
+                  <div><b>ABOUT</b><span>Our Story</span><span>Brand Name Society</span><span>Careers</span><span>Press</span><span>Sales &amp; Showroom</span></div>
+                  <div><b>HELP</b><span>FAQs</span><span>Contact</span><span>Shipping &amp; Delivery</span><span>Store Finder</span><span>Size Guides</span></div>
+                  <div><b>INFORMATION</b><span>Privacy Policy</span><span>Cookie Policy</span><span>Terms of Service</span><span>Membership</span><span>How We Care</span></div>
+                </div>
+              </div>
+              <div class="s-legal-wrap"><div class="s-policy"><b>이용약관</b><b>개인정보처리방침</b></div><div class="s-legal"><span>상호: OOOO</span><i></i><span>대표: OOO</span><i></i><span>개인정보관리책임자: OOO</span><i></i><span>전화: 000-0000-0000</span><i></i><span>이메일: business@email.com</span><i></i><span>주소: OOOO OOOO OOOO</span><i></i><span>사업자등록번호: 000-00-00000 (<u>사업자정보확인</u>)</span><i></i><span>통신판매: 제0000-서울마포-0000호</span><i></i><span>호스팅제공자: 팀울트라(주)</span></div><p class="s-copy">© Copyright OOOO. All Rights Reserved.</p></div>
+            </footer>
+          </div>
+        </div>
+      </div>
+      <div class="frame mob">
+        <div class="bar"><svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/></svg><button class="fb-btn" id="frameMirror" aria-label="미러링" aria-describedby="fbMirrorTip"><img src="assets/frame-mirroring.svg" width="16" height="16" alt=""><span class="m-spin" aria-hidden="true"></span></button>모바일</div>
+        <div class="view site-view">
+          <div class="ph site-ph" style="padding:12px"><i style="height:28px"></i><i style="height:200px"></i><i style="height:14px;width:60%"></i><i style="height:120px"></i></div>
+          <!-- Shop 페이지 모바일 (Figma 3598:26749) -->
+          <div class="site msite shop" data-w="390" data-key="shop">
+            <div class="s-status"><span>9:41</span><img src="assets/main/status-levels.svg" width="140.5" height="54" alt=""></div>
+            <header class="s-head"><a>Menu</a><a>Bag [0]</a><b class="s-brand">BRAND</b></header>
+            <section class="s-list">
+              <div class="s-tabbar"><div class="s-tabs"><span class="on">EXCLUSIVE</span><span>STATIONERY</span><span>LIFESTYLE</span></div></div>
+              <div class="s-sortbar"><div class="s-total"><span>상품</span><span class="en">9999</span></div><div class="s-sort"><span>최신순</span><img src="assets/main/chevron-down.svg" width="20" height="20" alt=""></div></div>
+              <div class="s-grid" data-layer="productList"><div class="s-card"><div class="s-thumb"><img src="assets/main/product-thumb.png" alt=""></div><div class="s-info"><p class="s-name">혜괴 문방사우 책갈피</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p2.png" alt=""></div><div class="s-info"><p class="s-name">호이오 도자기 나뭇잎</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p3.png" alt=""></div><div class="s-info"><p class="s-name">수직제작소 미니멀 펜 레스트</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p4.png" alt=""></div><div class="s-info"><p class="s-name">혜괴 벌레먹은 잎 이케바나 홀더</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p5.png" alt=""></div><div class="s-info"><p class="s-name">UNNAMED DAYS</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p6.png" alt=""></div><div class="s-info"><p class="s-name">프로퍼빌롱잉즈 DANTE Layered Binder Wallet (mini) Natural</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p7.png" alt=""></div><div class="s-info"><p class="s-name">AEHO 블루라인 웨이브머그</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div><div class="s-card"><div class="s-thumb"><img src="assets/main/shop-p8.png" alt=""></div><div class="s-info"><p class="s-name">AEHO 블루림 흑임자볼</p><p class="s-price"><span class="en">000,000</span>원<del><span class="en">000,000</span>원</del></p></div></div></div>
+            </section>
+            <footer class="s-foot">
+              <div class="s-loop" data-layer="textBlock"><h4 data-layer="title">Stay in the loop</h4><p data-layer="description">In posuere dapibus urna, bibendum efficitur sapien consectetur id. Morbi et scelerisque lorem, eu feugiat arcu.</p></div>
+              <div class="s-accs"><div class="s-acc"><span>SOCIAL</span><img src="assets/main/chevron-back.svg" width="20" height="20" alt=""></div><div class="s-acc"><span>COMPANY</span><img src="assets/main/chevron-back.svg" width="20" height="20" alt=""></div><div class="s-acc"><span>COMMUNITY</span><img src="assets/main/chevron-back.svg" width="20" height="20" alt=""></div><div class="s-acc"><span>CUSTOMER CENTER</span><img src="assets/main/chevron-back.svg" width="20" height="20" alt=""></div></div>
+              <div class="s-legal-wrap"><div class="s-policy"><b>이용약관</b><b>개인정보처리방침</b></div><div class="s-legal"><span>상호: OOOO</span><i></i><span>대표: OOO</span><i></i><span>개인정보관리책임자: OOO</span><i></i><span>전화: 000-0000-0000</span><i></i><span>이메일: business@email.com</span><i></i><span>주소: OOOO OOOO OOOO</span><i></i><span>사업자등록번호: 000-00-00000 (<u>사업자정보확인</u>)</span><i></i><span>통신판매: 제0000-서울마포-0000호</span><i></i><span>호스팅제공자: 팀울트라(주)</span></div><p class="s-copy">© Copyright OOOO. All Rights Reserved.</p></div>
+            </footer>
+          </div>
+          <!-- About 페이지 모바일 (Figma 3602:27633) -->
+          <div class="site msite about" data-w="390" data-key="about">
+            <header class="s-head"><a>Menu</a><a>Bag [0]</a><b class="s-brand">BRAND</b></header>
+            <section class="s-intro"><div class="s-intro-tb" data-layer="textBlock"><h2 data-layer="title">We Believe Depth Lasts Longer</h2><p data-layer="description">굿모닝제너럴스토어는 일상에 필요한 기본적인 제품부터 필수적이진않지만 더나은 삶을위한 제품까지,영감을 더하여 판매하는 상점입니다.<br><br>건강한 라이프스타일이 자신감 있는 삶의 기본이라고 생각하며 물건을 통해 가치와 스토리를 함께 전달합니다.</p></div></section>
+            <section class="s-story"><div class="s-story-media" data-layer="image"><img src="assets/main/about-media.png" alt=""></div><div class="s-story-box"><div class="s-story-tb" data-layer="textBlock"><h3 data-layer="title">DO SMALL THINGS<br>WITH GREAT LOVE.</h3><p data-layer="description">가치 있는 삶과 행복을 추구하고 싶은 욕구와 욕망, 이것은 변하지 않는다고 믿습니다.<br><br>행복이란 늘 가까이에 있지만 그것을 끊임없이 관찰하고 발견해야 비로소 느낄 수 있습니다.</p></div></div></section>
+            <footer class="s-foot">
+              <div class="s-loop" data-layer="textBlock"><h4 data-layer="title">Stay in the loop</h4><p data-layer="description">In posuere dapibus urna, bibendum efficitur sapien consectetur id. Morbi et scelerisque lorem, eu feugiat arcu.</p></div>
+              <div class="s-accs"><div class="s-acc"><span>SOCIAL</span><img src="assets/main/chevron-back.svg" width="20" height="20" alt=""></div><div class="s-acc"><span>COMPANY</span><img src="assets/main/chevron-back.svg" width="20" height="20" alt=""></div><div class="s-acc"><span>COMMUNITY</span><img src="assets/main/chevron-back.svg" width="20" height="20" alt=""></div><div class="s-acc"><span>CUSTOMER CENTER</span><img src="assets/main/chevron-back.svg" width="20" height="20" alt=""></div></div>
+              <div class="s-legal-wrap"><div class="s-policy"><b>이용약관</b><b>개인정보처리방침</b></div><div class="s-legal"><span>상호: OOOO</span><i></i><span>대표: OOO</span><i></i><span>개인정보관리책임자: OOO</span><i></i><span>전화: 000-0000-0000</span><i></i><span>이메일: business@email.com</span><i></i><span>주소: OOOO OOOO OOOO</span><i></i><span>사업자등록번호: 000-00-00000 (<u>사업자정보확인</u>)</span><i></i><span>통신판매: 제0000-서울마포-0000호</span><i></i><span>호스팅제공자: 팀울트라(주)</span></div><p class="s-copy">© Copyright OOOO. All Rights Reserved.</p></div>
+            </footer>
+          </div>
+          <!-- Main 페이지 모바일 (Figma 3598:23899, 390px 원본을 프레임 너비로 축소) -->
+          <div class="site msite" data-w="390" data-key="main">
+            <header class="s-head"><a>Menu</a><a>Bag [0]</a><b class="s-brand">BRAND</b></header>
+            <section class="s-hero"><div class="s-hero-media"><img src="assets/main/hero.png" alt=""><div class="s-tb" data-layer="textBlock"><h2 data-layer="title">2027 DIARY COLLECTION</h2></div></div></section>
+            <section class="s-best">
+              <div class="s-title" data-layer="textBlock"><h3 data-layer="title">Best Sellers</h3><p data-layer="description">쓰임에 작은 즐거움을 더해 제안하는 GMGS Paper Products를 만나보세요.</p></div>
+              <div class="s-media" data-layer="image"><img src="assets/main/bestseller-media.png" alt=""></div>
+              <div class="s-card" data-layer="product"><div class="s-thumb"><img src="assets/main/product-thumb.png" alt=""></div><div class="s-info"><p class="s-name">혜괴 문방사우 책갈피</p><p class="s-price"><span class="en">68,000</span>원</p></div></div>
+            </section>
+            <footer class="s-foot">
+              <div class="s-loop" data-layer="textBlock"><h4 data-layer="title">Stay in the loop</h4><p data-layer="description">In posuere dapibus urna, bibendum efficitur sapien consectetur id. Morbi et scelerisque lorem, eu feugiat arcu.</p></div>
+              <div class="s-accs"><div class="s-acc"><span>SOCIAL</span><img src="assets/main/chevron-back.svg" width="20" height="20" alt=""></div><div class="s-acc"><span>COMPANY</span><img src="assets/main/chevron-back.svg" width="20" height="20" alt=""></div><div class="s-acc"><span>COMMUNITY</span><img src="assets/main/chevron-back.svg" width="20" height="20" alt=""></div><div class="s-acc"><span>CUSTOMER CENTER</span><img src="assets/main/chevron-back.svg" width="20" height="20" alt=""></div></div>
+              <div class="s-legal-wrap"><div class="s-policy"><b>이용약관</b><b>개인정보처리방침</b></div><div class="s-legal"><span>상호: OOOO</span><i></i><span>대표: OOO</span><i></i><span>개인정보관리책임자: OOO</span><i></i><span>전화: 000-0000-0000</span><i></i><span>이메일: business@email.com</span><i></i><span>주소: OOOO OOOO OOOO</span><i></i><span>사업자등록번호: 000-00-00000 (<u>사업자정보확인</u>)</span><i></i><span>통신판매: 제0000-서울마포-0000호</span><i></i><span>호스팅제공자: 팀울트라(주)</span></div><p class="s-copy">© Copyright OOOO. All Rights Reserved.</p></div>
+            </footer>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 헤더 패널 (Figma 3612:506674): 헤더 섹션을 선택하면 표시, 텍스트는 선택 불가 -->
+  <div class="panel hpanel" aria-label="헤더 속성">
+    <div class="hp-head"><h3>헤더</h3></div>
+    <div class="hp-body"><button class="hp-edit"><img src="assets/header-edit.svg" width="20" height="20" alt=""><span>헤더 편집</span></button></div>
+  </div>
+
+  <!-- 섹션 패널 (Figma 43:141818): 캔버스에서 섹션을 선택하면 표시 -->
+  <div class="panel spanel" aria-label="섹션 속성">
+    <div class="tp-head"><h3>섹션</h3><button class="sp-more" aria-label="더보기"><img src="assets/sec-overflow.svg" width="16" height="16" alt=""></button></div>
+    <div class="sp-list"><button class="sp-item" id="spBgItem"><span class="sp-ic" id="spBgIc"><img src="assets/sec-image.svg" alt=""><img class="sp-prev" id="spBgPrev" alt=""><i class="sp-prev-ovl" id="spBgOvl"></i></span><span class="sp-label">배경</span><img class="sp-chev" src="assets/sec-chevron-right.svg" width="16" height="16" alt=""></button><button class="sp-item"><span class="sp-ic"><img src="assets/sec-layout.svg" alt=""></span><span class="sp-label">레이아웃</span><img class="sp-chev" src="assets/sec-chevron-right.svg" width="16" height="16" alt=""></button><button class="sp-item"><span class="sp-ic"><img src="assets/sec-theme.svg" alt=""></span><span class="sp-label">색상</span><img class="sp-chev" src="assets/sec-chevron-right.svg" width="16" height="16" alt=""></button><button class="sp-item"><span class="sp-ic"><img src="assets/sec-error.svg" alt=""></span><span class="sp-label">애니메이션</span><img class="sp-chev" src="assets/sec-chevron-right.svg" width="16" height="16" alt=""></button><button class="sp-item"><span class="sp-ic"><img src="assets/sec-error.svg" alt=""></span><span class="sp-label">구성 요소</span><img class="sp-chev" src="assets/sec-chevron-right.svg" width="16" height="16" alt=""></button></div>
+  </div>
+  <!-- 배경 패널 (Figma 27:353710): 섹션 패널에서 '배경'을 누르면 표시 -->
+  <!-- 레이아웃 패널 (Figma 2655-516049 데스크탑 / 2655-516085 모바일): 첫 번째 섹션 전용, 모양만 -->
+  <div class="panel lpanel" aria-label="레이아웃" data-tab="desk">
+    <div class="bp-head"><button class="bp-back" id="lpBack" aria-label="뒤로"><img src="assets/bg-back.svg" width="18" height="18" alt=""></button><h3>레이아웃</h3></div>
+    <div class="lp-tabs" id="lpTabs"><button data-t="desk" class="on">데스크탑</button><button data-t="mob">모바일</button></div>
+    <div class="lp-pane lp-desk"><div class="lp-chips"><span class="lp-chip on">풀스크린</span><span class="lp-chip">2:1</span><span class="lp-chip">21:9</span><span class="lp-chip">3:1</span><span class="lp-chip">4:1</span></div><div class="lp-opts"><div class="lp-opt on"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div></div></div>
+    <div class="lp-pane lp-mob"><div class="lp-chips"><span class="lp-chip on">풀스크린</span><span class="lp-chip">9:16</span><span class="lp-chip">5:8</span><span class="lp-chip">4:5</span></div><div class="lp-opts"><div class="lp-opt on"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div></div></div>
+  </div>
+
+  <!-- 색상 패널: 기본 = Scheme만 (Figma 2655-506334), Main 첫 번째 섹션 = Scheme + on-media (Figma 2655-508720) -->
+  <div class="panel cpanel" aria-label="색상">
+    <div class="bp-head"><button class="bp-back" id="cpBack" aria-label="뒤로"><img src="assets/bg-back.svg" width="18" height="18" alt=""></button><h3>색상</h3></div>
+    <div class="cp-sec cp-scheme"><p class="cp-title">Scheme</p><div class="cp-group"><button class="cp-opt on"><span class="cp-prev cp-white"><span class="cp-sw"><i style="background:#1a1715"></i><em>Aa</em></span></span></button><button class="cp-opt"><span class="cp-prev cp-gray"><span class="cp-sw"><i style="background:#1a1715"></i><em>Aa</em></span></span></button><button class="cp-opt"><span class="cp-prev cp-dark"><span class="cp-sw"><i style="background:#fff"></i><em>Aa</em></span></span></button></div><p class="cp-note">{Color Scheme}은 <u>사이트 스타일</u>에서 수정 가능해요.</p></div>
+    <div class="cp-sec cp-onmedia"><p class="cp-title">on-media</p><div class="cp-group"><button class="cp-opt on"><span class="cp-prev cp-media cp-light"><img class="cp-img" src="assets/color-onmedia.png" alt=""><i class="cp-dim" style="background:rgba(0,0,0,.6)"></i><span class="cp-sw"><i style="background:#fff"></i><em>Aa</em></span><span class="cp-desc"><b>밝은 색상</b><small>어두운 이미지 위에서 잘 보여요</small></span></span></button><button class="cp-opt"><span class="cp-prev cp-media"><img class="cp-img" src="assets/color-onmedia.png" alt=""><i class="cp-dim" style="background:rgba(255,255,255,.2)"></i><span class="cp-sw"><i style="background:#1a1715"></i><em>Aa</em></span><span class="cp-desc"><b>어두운 색상</b><small>밝은 이미지 위에서 잘 보여요</small></span></span></button></div><p class="cp-note">{Color Scheme}은 <u>사이트 스타일</u>에서 수정 가능해요.</p></div>
+  </div>
+
+  <!-- 애니메이션 패널 (Figma 3342-306377): 모든 섹션 공통, 모양만 -->
+  <div class="panel apanel" aria-label="애니메이션">
+    <div class="bp-head"><button class="bp-back" id="apBack" aria-label="뒤로"><img src="assets/bg-back.svg" width="18" height="18" alt=""></button><h3>애니메이션</h3></div>
+    <div class="tp-sec"><p class="tp-label">애니메이션</p><button class="tp-drop"><span>Slide in</span><img src="assets/panel-chevron-down.svg" width="16" height="16" alt=""></button></div>
+  </div>
+
+  <!-- 구성 요소 패널 (Figma 3311-665690): 섹션의 레이어 구조(textBlock 안 overline/title/description, button)로 목록 자동 생성 -->
+  <div class="panel opanel" aria-label="구성 요소">
+    <div class="bp-head"><button class="bp-back" id="opBack" aria-label="뒤로"><img src="assets/bg-back.svg" width="18" height="18" alt=""></button><h3>구성 요소</h3></div>
+    <div id="opGroups"></div>
+  </div>
+
+  <!-- 미디어 패널 (Figma 27-873129): 섹션 안 이미지(image 레이어) 선택 시 -->
+  <div class="panel mpanel" aria-label="미디어">
+    <div class="hp-head"><h3>미디어</h3></div>
+    <div class="bp-media">
+      <div class="bp-title"><p class="tp-label">콘텐츠</p><button class="tp-sync" data-tip="데스크탑·모바일 동기화"><img src="assets/panel-sync.svg" width="16" height="16" alt=""></button></div>
+      <div class="bp-seg mp-seg"><button class="on">이미지</button><button>동영상</button></div>
+      <div class="bp-item">
+        <div class="bp-thumb"><img id="mpImg" alt=""></div>
+        <div class="bp-meta">
+          <p class="bp-file" id="mpFile">fileName.png</p>
+          <div class="bp-btns">
+            <div class="bp-tbtns"><button>변경</button><i></i><button>편집</button></div>
+            <div class="bp-ibtns"><button data-tip="표시 영역 조정" aria-label="표시 영역 조정"><img src="assets/bg-focal.svg" width="16" height="16" alt=""></button><button data-tip="삭제" aria-label="삭제"><img src="assets/bg-delete.svg" width="16" height="16" alt=""></button></div>
+          </div>
+        </div>
+      </div>
+      <div class="bp-ovl">
+        <div class="bp-ovl-title"><span>오버레이</span><span class="bp-val"><b id="mpOvlVal">0</b>%</span></div>
+        <div class="bp-ovl-row"><span class="bp-chip"><i></i></span><div class="bp-slider" id="mpSlider"><span class="bp-track"></span><span class="bp-fill" id="mpFill"></span><span class="bp-knob" id="mpKnob"></span></div></div>
+      </div>
+    </div>
+    <div class="tp-sec tp-last mp-ratio"><p class="tp-label">비율</p><div class="mp-drops"><button class="tp-drop"><img src="assets/ratio-desktop.svg" width="16" height="16" alt=""><span>1:1</span><img src="assets/panel-chevron-down.svg" width="16" height="16" alt=""></button><button class="tp-drop"><img src="assets/ratio-mobile.svg" width="16" height="16" alt=""><span>1:1</span><img src="assets/panel-chevron-down.svg" width="16" height="16" alt=""></button></div></div>
+  </div>
+
+  <!-- 상품 패널 (Figma 1168-378233): Main 섹션 2 상품 카드(product 레이어) 선택 시 -->
+  <div class="panel ppanel" aria-label="상품">
+    <div class="hp-head"><h3>상품</h3></div>
+    <div class="pp-sec">
+      <div class="pp-title"><p class="tp-label">진열 중인 상품</p><button class="pp-edit">수정</button></div>
+      <div class="pp-list" id="ppList"></div>
+    </div>
+  </div>
+
+  <!-- 카테고리 패널 (Figma 3612-507069 / 전체보기 on 3612-507123): Shop 상품 영역(productList 레이어) 선택 시 -->
+  <div class="panel gpanel" aria-label="상품">
+    <div class="hp-head"><h3>상품</h3></div>
+    <div class="pc-sec"><p class="tp-label">진열할 카테고리</p><div class="pc-list" id="pcList"><label class="pc-item"><input type="checkbox" checked data-cat="EXCLUSIVE"><span class="pc-box"><img src="assets/check-small.svg" width="18" height="18" alt=""></span><span>EXCLUSIVE</span></label><label class="pc-item"><input type="checkbox" checked data-cat="STATIONERY"><span class="pc-box"><img src="assets/check-small.svg" width="18" height="18" alt=""></span><span>STATIONERY</span></label><label class="pc-item"><input type="checkbox" checked data-cat="LIFESTYLE"><span class="pc-box"><img src="assets/check-small.svg" width="18" height="18" alt=""></span><span>LIFESTYLE</span></label></div></div>
+    <div class="pc-all">
+      <div class="pc-all-title"><p class="tp-label">전체보기</p><button class="pc-switch" id="pcSwitch" role="switch" aria-checked="false"><img src="assets/switch-off.svg" width="28" height="16" alt=""></button></div>
+      <div class="pc-all-body">
+        <div class="pc-field"><p>상품 범위</p><button class="tp-drop"><span>선택한 카테고리의 모든 상품</span><img src="assets/panel-chevron-down.svg" width="16" height="16" alt=""></button></div>
+        <div class="pc-field"><p>탭 문구</p><label class="tp-field"><input id="pcAllText" value="All" autocomplete="off"></label></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel bpanel" aria-label="배경">
+    <div class="bp-head"><button class="bp-back" id="bpBack" aria-label="뒤로"><img src="assets/bg-back.svg" width="18" height="18" alt=""></button><h3>배경</h3></div>
+    <div class="bp-media">
+      <div class="bp-title"><p class="tp-label">콘텐츠</p><button class="tp-sync" data-tip="데스크탑·모바일 동기화"><img src="assets/panel-sync.svg" width="16" height="16" alt=""></button></div>
+      <div class="bp-seg" id="bpSeg"><button class="on">이미지</button><button>동영상</button></div>
+      <div class="bp-item">
+        <div class="bp-thumb"><img id="bpImg" alt=""></div>
+        <div class="bp-meta">
+          <p class="bp-file" id="bpFile">fileName.png</p>
+          <div class="bp-btns">
+            <div class="bp-tbtns"><button>변경</button><i></i><button>편집</button></div>
+            <div class="bp-ibtns"><button data-tip="표시 영역 조정" aria-label="표시 영역 조정"><img src="assets/bg-focal.svg" width="16" height="16" alt=""></button><button data-tip="삭제" aria-label="삭제"><img src="assets/bg-delete.svg" width="16" height="16" alt=""></button></div>
+          </div>
+        </div>
+      </div>
+      <div class="bp-ovl">
+        <div class="bp-ovl-title"><span>오버레이</span><span class="bp-val"><b id="bpOvlVal">0</b>%</span></div>
+        <div class="bp-ovl-row"><span class="bp-chip"><i></i></span><div class="bp-slider" id="bpSlider"><span class="bp-track"></span><span class="bp-fill" id="bpFill"></span><span class="bp-knob" id="bpKnob"></span></div></div>
+      </div>
+    </div>
+    <div class="tp-sec tp-last tp-link bp-link"><p class="tp-label">링크</p><label class="tp-field"><input placeholder="페이지 선택 혹은 URL 주소 입력" autocomplete="off"></label></div>
+  </div>
+  <!-- 텍스트 패널 (Figma 27:352225): 캔버스에서 텍스트를 선택하면 표시 -->
+  <div class="panel tpanel" id="textPanel" aria-label="텍스트 속성">
+    <div class="tp-head"><h3>텍스트</h3><button class="tp-sync" data-tip="데스크탑·모바일 동기화"><img src="assets/panel-sync.svg" width="16" height="16" alt=""></button></div>
+    <div class="tp-sec tp-content"><p class="tp-label">내용</p><button class="tp-ai"><img src="assets/panel-ai.svg" width="24" height="24" alt=""><span>AI 도움받기</span><img class="tp-chev" src="assets/panel-chevron-right.svg" width="16" height="16" alt=""></button></div>
+    <div class="tp-sec tp-style"><p class="tp-label">스타일</p><button class="tp-drop"><span id="tpStyle">제목 3</span><img src="assets/panel-chevron-down.svg" width="16" height="16" alt=""></button></div>
+    <div class="tp-sec tp-last"><p class="tp-label">색상</p><div class="tp-color"><i id="tpChip"></i><span id="tpColor">colorName</span></div></div>
+    <!-- 글자 편집 중 (Figma 27:352235): 굵기 · 색상 · 링크 -->
+    <div class="tp-sec tp-edit tp-first"><p class="tp-label">굵기</p><button class="tp-drop"><span id="tpWeight">Medium</span><img src="assets/panel-chevron-down.svg" width="16" height="16" alt=""></button></div>
+    <div class="tp-sec tp-edit"><p class="tp-label">색상</p><div class="tp-color"><i id="tpChip2"></i><span id="tpColor2">colorName</span></div></div>
+    <div class="tp-sec tp-edit tp-last tp-link"><p class="tp-label">링크</p><label class="tp-field"><input id="tpLink" placeholder="페이지 선택 혹은 URL 주소 입력" autocomplete="off"></label></div>
+  </div>
+  <div class="gain" id="gain"></div>
+</div>
+
+<script>
+  const app = document.getElementById('app');
+  const desc = document.getElementById('desc');
+  const gain = document.getElementById('gain');
+  const D = {
+    A:   ['<b>A안 · 현재 고정 툴바</b> · 55px 고정 바가 캔버스 위를 가림', '고정 툴바 55px'],
+    B:   ['<b>B안 · 3분할 플로팅</b> · 지금 배치를 유지한 채 그룹별 알약으로 띄움. 학습 비용 가장 낮음. 크레딧은 좌하단. 저장 문구가 사라져도 구름 아이콘은 남김','캔버스 +55px · 상단 좌우 여백도 캔버스'],
+    C:   ['<b>C안 · 캔버스 버튼</b> · B안과 같고, 미리보기는 데스크탑 프레임·미러링은 모바일 프레임 머리로 옮김','캔버스 +55px'],
+  };
+  function sync(){
+    const v = app.dataset.v;
+    desc.innerHTML = D[v][0];
+    gain.textContent = D[v][1];
+    // 플로팅 시안은 프레임 시작점을 툴바 아래로
+    document.querySelector('.frames').style.setProperty('--pad-top', '96px');
+    {
+      closeMenus();
+      document.querySelectorAll('[data-part]').forEach(node => {
+        const anchor = document.querySelector(`.tb-${v === 'C' ? 'B' : v} .anchor[data-for="${node.dataset.part}"]`);
+        if (anchor && anchor.previousElementSibling !== node) anchor.before(node);
+      });
+      // C안은 줌·툴팁이 아래쪽에 있으니 메뉴를 위로 연다
+      document.querySelectorAll('.zoom:not(.zbar .zoom)').forEach(z => z.dataset.dir = 'down');
+    }
+  }
+  /* ---------- 줌 ---------- */
+  const STEPS = [.1,.25,.33,.5,.67,.75,1,1.25,1.5,2,3,4];
+  let zoom = 1;
+  const chev = '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>';
+  document.querySelectorAll('.zoom').forEach(z => {
+    z.innerHTML = `<button class="zbtn" data-tip-off><span class="zval">100%</span>${chev}</button>
+      <div class="zmenu">
+        <button data-z="in">확대<kbd>⌘ +</kbd></button>
+        <button data-z="out">축소<kbd>⌘ −</kbd></button>
+        <button data-z="fit">화면에 맞추기<kbd>⇧ 1</kbd></button>
+        <hr>
+        <button data-z="2">200%</button>
+        <button data-z="1">100%</button>
+        <button data-z="0.5">50%</button>
+      </div>`;
+    z.querySelector('.zbtn').onclick = e => { e.stopPropagation(); const o = z.classList.contains('open'); closeMenus(); z.classList.toggle('open', !o); };
+    z.querySelector('.zmenu').onclick = e => {
+      const b = e.target.closest('button'); if(!b) return;
+      const k = b.dataset.z;
+      if (k === 'in')  setZoom(STEPS.find(s => s > zoom + .001) ?? zoom);
+      else if (k === 'out') setZoom([...STEPS].reverse().find(s => s < zoom - .001) ?? zoom);
+      else if (k === 'fit') fit();
+      else setZoom(+k);
+      closeMenus();
+    };
+  });
+  // A안 왼쪽 아래 확대·축소 버튼
+  document.querySelectorAll('.zbar [data-zstep]').forEach(b => b.onclick = () => {
+    if (b.dataset.zstep === 'in') setZoom(STEPS.find(s => s > zoom + .001) ?? zoom);
+    else setZoom([...STEPS].reverse().find(s => s < zoom - .001) ?? zoom);
+  });
+  document.querySelectorAll('.zbar .zbtn svg').forEach(v => v.outerHTML = '<img src="assets/chevron-zoom.svg" width="16" height="16" alt="">');
+  document.querySelectorAll('.tb-B .zbtn svg').forEach(v => v.outerHTML = '<img class="fi" src="assets/chevron-zoom.svg" width="16" height="16" alt="">');
+  /* ---------- 페이지 선택 메뉴 ---------- */
+  const pageBtn = document.getElementById('pageBtn'), pageMenu = document.getElementById('pageMenu');
+  pageBtn.onclick = e => { e.stopPropagation(); const o = pageMenu.classList.contains('open'); closeMenus(); pageMenu.classList.toggle('open', !o); pageBtn.classList.toggle('open', !o); };
+  const pmPop = document.getElementById('pmPop');
+  let popFor = null;
+  function closePop(){ pmPop.classList.remove('open'); if (popFor) popFor.classList.remove('menu-open'); popFor = null; }
+  pageMenu.onclick = e => {
+    e.stopPropagation();
+    const more = e.target.closest('.pm-more');
+    if (more) {
+      const it = more.closest('.pm-item');
+      if (popFor === it) { closePop(); return; }
+      closePop(); popFor = it; it.classList.add('menu-open');
+      // 더보기 버튼 오른쪽 끝에 맞추고 4px 아래로
+      const m = pageMenu.getBoundingClientRect(), r = more.getBoundingClientRect();
+      pmPop.style.top = (r.bottom - m.top - 1 + 4) + 'px';
+      pmPop.style.left = (r.right - m.left - 1 - 160) + 'px';
+      pmPop.classList.add('open');
+      return;
+    }
+    const act = e.target.closest('.pm-pop-item');
+    if (act) {
+      const it = popFor; closePop();
+      if (act.dataset.act === 'delete' && it) deletePage(it);
+      if (act.dataset.act === 'rename' && it) openPageSettings(it);
+      return;
+    }
+    if (e.target.closest('.pm-pop')) { closePop(); return; }
+    if (justDragged) { justDragged = false; return; }
+    if (popFor) { closePop(); return; }
+    const it = e.target.closest('.pm-item'); if (!it) return;
+    pageMenu.querySelectorAll('.pm-item').forEach(x => x.classList.toggle('on', x === it));
+    syncPageIcons();
+    setCurrentPage(it);
+    pageBtn.querySelector('span').textContent = it.querySelector('.pl').textContent;
+    const ic = pageBtn.querySelector('img');
+    ic.src = it.dataset.icon === 'home' ? 'assets/home.svg' : `assets/menu-${it.dataset.icon}.svg`;
+    closeMenus();
+  };
+  /* 선택된 페이지만 파란 아이콘 */
+  function syncPageIcons(){
+    pageMenu.querySelectorAll('.pm-item').forEach(x => {
+      const pi = x.querySelector('.pi'); if (!pi) return;
+      pi.src = `assets/menu-${x.dataset.icon}${x.classList.contains('on') ? '-on' : ''}.svg`;
+    });
+  }
+  syncPageIcons();
+  /* 삭제: 선택 중이던 페이지를 지우면 Home으로 이동 */
+  function deletePage(it){
+    const wasOn = it.classList.contains('on');
+    it.remove();
+    if (wasOn) {
+      const home = pageMenu.querySelector('.pm-item[data-icon="home"]');
+      home.classList.add('on');
+      syncPageIcons();
+      setCurrentPage(home);
+      pageBtn.querySelector('span').textContent = home.querySelector('.pl').textContent;
+      pageBtn.querySelector('img').src = 'assets/home.svg';
+    }
+  }
+  /* 순서 바꾸기: 항목 어디든 눌러 위아래로 끌기 (4px 이상 움직이면 끌기, 아니면 클릭=선택). Main은 맨 위 고정 */
+  let drag = null, justDragged = false;
+  pageMenu.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    const it = e.target.closest('.pm-item.drag'); if (!it) return;
+    if (e.target.closest('.pm-more')) return;
+    drag = { it, list: it.parentElement, y0: e.clientY, id: e.pointerId, started: false };
+  });
+  pageMenu.addEventListener('pointermove', e => {
+    if (!drag) return;
+    if (!drag.started) {
+      if (Math.abs(e.clientY - drag.y0) < 4) return;
+      drag.started = true; closePop();
+      drag.it.classList.add('dragging'); pageMenu.classList.add('is-dragging');
+      try { drag.it.setPointerCapture(drag.id); } catch (_) {}
+    }
+    e.preventDefault();
+    const items = [...drag.list.querySelectorAll('.pm-item.drag')].filter(x => x !== drag.it);
+    let before = null;
+    for (const x of items) { const r = x.getBoundingClientRect(); if (e.clientY < r.top + r.height / 2) { before = x; break; } }
+    if (drag.it.nextElementSibling !== before || (!before && drag.list.lastElementChild !== drag.it)) {
+      if (before) drag.list.insertBefore(drag.it, before); else drag.list.appendChild(drag.it);
+    }
+  });
+  const endDrag = () => {
+    if (!drag) return;
+    if (drag.started) {
+      drag.it.classList.remove('dragging'); pageMenu.classList.remove('is-dragging');
+      justDragged = true; setTimeout(() => justDragged = false, 0);
+    }
+    drag = null;
+  };
+  pageMenu.addEventListener('pointerup', endDrag);
+  pageMenu.addEventListener('pointercancel', endDrag);
+
+  /* ---------- 페이지 설정 다이얼로그 ---------- */
+  const psDim = document.getElementById('psDim'), psName = document.getElementById('psName'), psSlug = document.getElementById('psSlug'),
+        psSave = document.getElementById('psSave'), psNameCount = document.getElementById('psNameCount'), psSlugCount = document.getElementById('psSlugCount');
+  let psFor = null, psInit = null;
+  const slugOf = it => it.dataset.slug ?? it.querySelector('.pl').textContent;
+  function psUpdate(){
+    psNameCount.textContent = `${psName.value.length}/50`;
+    psSlugCount.textContent = `${psSlug.value.length}/50`;
+    const changed = psName.value !== psInit.name || psSlug.value !== psInit.slug;
+    psSave.disabled = !changed || !psName.value.trim() || !psSlug.value.trim();
+  }
+  function openPageSettings(it){
+    psFor = it;
+    psInit = { name: it.querySelector('.pl').textContent, slug: slugOf(it) };
+    psName.value = psInit.name; psSlug.value = psInit.slug;
+    psUpdate();
+    psDim.classList.add('open');
+    psName.focus(); psName.select();
+  }
+  function closePageSettings(){ psDim.classList.remove('open'); psFor = null; }
+  psName.addEventListener('input', psUpdate);
+  psSlug.addEventListener('input', psUpdate);
+  psDim.addEventListener('click', e => {
+    e.stopPropagation();
+    if (e.target === psDim || e.target.closest('#psClose')) closePageSettings();
+    if (e.target.closest('.ps-input')) e.target.closest('.ps-input').querySelector('input').focus();
+  });
+  psSave.addEventListener('click', () => {
+    if (psSave.disabled || !psFor) return;
+    psFor.querySelector('.pl').textContent = psName.value.trim();
+    psFor.dataset.slug = psSlug.value.trim();
+    if (psFor.classList.contains('on')) pageBtn.querySelector('span').textContent = psName.value.trim();
+    closePageSettings();
+  });
+  psDim.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Escape') closePageSettings();
+    if (e.key === 'Enter' && !e.isComposing && !psSave.disabled) psSave.click();
+  });
+
+  /* ---------- Main 페이지 화면: 원본 너비(1920/390)로 그리고 프레임 너비에 맞게 축소 ---------- */
+  function layoutSites(){
+    const page = app.dataset.page;
+    document.querySelectorAll('.site-view').forEach(view => {
+      let shown = null;
+      view.querySelectorAll('.site').forEach(site => {
+        site.style.transform = `scale(${view.clientWidth / +site.dataset.w})`;
+        if (site.dataset.key === page) shown = site;
+      });
+      view.style.height = shown ? (shown.offsetHeight * view.clientWidth / +shown.dataset.w) + 'px' : '';
+    });
+  }
+  function setCurrentPage(it){ app.dataset.page = (it && it.dataset.key) || 'other'; layoutSites(); if (typeof clearSelection === 'function') clearSelection(); }
+  app.dataset.page = 'main';
+  layoutSites();
+  document.fonts && document.fonts.ready.then(layoutSites);
+  window.addEventListener('load', layoutSites);
+
+  /* ---------- 크레딧 카드 ---------- */
+  const creditBtn = document.getElementById('creditBtn'), creditCard = document.getElementById('creditCard');
+  function setCredit(open){ creditCard.classList.toggle('open', open); creditCard.parentElement.classList.toggle('card-open', open); }
+  creditBtn.onclick = e => { e.stopPropagation(); const o = creditCard.classList.contains('open'); closeMenus(); setCredit(!o); };
+  creditCard.onclick = e => { e.stopPropagation(); if (e.target.closest('#creditClose')) setCredit(false); };
+
+  /* ---------- 미러링 안내 ---------- */
+  const mirrorBtn = document.getElementById('mirrorBtn'), mirrorPop = document.getElementById('mirrorPop');
+  function setMirror(open){ const dim = document.getElementById('mpDim'); if (!open && dim.contains(mirrorPop)) { dim.classList.remove('open'); document.querySelector('[data-part="mirror"]').append(mirrorPop); } mirrorPop.classList.toggle('open', open); mirrorBtn.classList.toggle('open', open); mirrorBtn.setAttribute('aria-expanded', open); }
+  // C안: 모바일 프레임 머리의 미러링 버튼 → Dim을 깔고 화면 정중앙에 미러링 안내(다이얼로그)
+  const mpDim = document.getElementById('mpDim');
+  document.getElementById('frameMirror').addEventListener('click', e => {
+    e.stopPropagation();
+    closeMenus();
+    mpDim.append(mirrorPop); mpDim.classList.add('open');
+    setMirror(true);
+  });
+  // 미러링 버튼 호버 툴팁: 버튼 왼쪽에 맞춰 아래 4px (캔버스 확대와 상관없이 같은 크기)
+  const fbMirror = document.getElementById('frameMirror'), fbTip = document.getElementById('fbMirrorTip');
+  fbMirror.addEventListener('mouseenter', () => {
+    if (mirrorPop.classList.contains('open')) return;
+    const r = fbMirror.getBoundingClientRect();
+    fbTip.style.left = Math.max(12, Math.min(r.left, innerWidth - 189 - 12)) + 'px'; fbTip.style.top = (r.bottom + 4) + 'px';
+    fbTip.classList.add('show');
+  });
+  ['mouseleave', 'click'].forEach(ev => fbMirror.addEventListener(ev, () => fbTip.classList.remove('show')));
+  mirrorBtn.onclick = e => { e.stopPropagation(); const o = mirrorPop.classList.contains('open'); closeMenus(); setMirror(!o); };
+  // '모바일 앱에서 미러링' → 팝업 닫고 미러링 아이콘 자리에 스피너 3초
+  let mirrorSpinT;
+  let snackT;
+  function showSnackbar(msg, ms = 3000){
+    const sb = document.getElementById('snackbar');
+    sb.textContent = msg; sb.classList.add('show');
+    clearTimeout(snackT); snackT = setTimeout(() => sb.classList.remove('show'), ms);
+  }
+  function startMirrorSpin(){
+    showSnackbar('모바일 앱을 실행해 주세요');
+    const btns = [mirrorBtn, document.getElementById('frameMirror')];
+    btns.forEach(b => b.classList.add('is-mirroring'));
+    clearTimeout(mirrorSpinT);
+    mirrorSpinT = setTimeout(() => btns.forEach(b => b.classList.remove('is-mirroring')), 3000);
+  }
+  mirrorPop.onclick = e => { e.stopPropagation(); if (e.target.closest('#mirrorStart')) { setMirror(false); startMirrorSpin(); } };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { setMirror(false); } });
+
+  function closeMenus(){ if (typeof closePop === 'function') closePop(); if (typeof setMirror === 'function') setMirror(false); if (typeof setCredit === 'function') setCredit(false); document.querySelectorAll('.zoom.open,.pagemenu.open,.pagesel2.open').forEach(z => z.classList.remove('open')); }
+  document.addEventListener('click', closeMenus);
+  /* ---------- 캔버스 이동·확대 ----------
+     · ⌘/Ctrl + 휠, 트랙패드 핀치: 마우스 위치 기준 확대/축소
+     · 휠·트랙패드 두 손가락: 상하좌우 이동 (Shift + 휠 = 좌우)
+     · 빈 캔버스 드래그, 스페이스 + 드래그, 가운데 버튼 드래그: 이동 */
+  const canvasEl = document.querySelector('.canvas'), framesEl = document.querySelector('.frames');
+  let panX = 0, panY = 0;
+  function applyView(){
+    framesEl.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    // 움직이는 동안만 GPU 레이어로(부드럽게), 멈추면 해제해서 현재 배율로 다시 그림(선명하게)
+    framesEl.style.willChange = 'transform';
+    clearTimeout(applyView.t);
+    applyView.t = setTimeout(() => { framesEl.style.willChange = 'auto'; }, 150);
+    if (typeof placeSelBoxes === 'function') placeSelBoxes();
+    let g = 16 * zoom; // 점 배경도 함께 움직이고 커짐 (너무 촘촘하거나 성기지 않게 10~32px 사이로)
+    while (g < 10) g *= 2; while (g > 32) g /= 2;
+    canvasEl.style.backgroundSize = `${g}px ${g}px`;
+    canvasEl.style.backgroundPosition = `${panX}px ${panY}px`;
+    const pct = Math.round(zoom * 100) + '%';
+    document.querySelectorAll('.zval').forEach(v => v.textContent = pct);
+    document.querySelectorAll('.zmenu [data-z]').forEach(b => b.classList.toggle('on', Math.abs(+b.dataset.z - zoom) < .001));
+  }
+  // (cx, cy) = 캔버스 안 좌표. 그 점이 제자리에 머물도록 확대
+  function zoomAt(z, cx, cy){
+    const nz = Math.min(4, Math.max(.1, z));
+    panX = cx - (cx - panX) * nz / zoom;
+    panY = cy - (cy - panY) * nz / zoom;
+    zoom = nz; viewTouched = true; applyView();
+  }
+  function setZoom(z){ zoomAt(z, canvasEl.clientWidth / 2, canvasEl.clientHeight / 2); }
+  function fit(){
+    // 데스크탑+모바일 프레임이 툴바 아래·패널 왼쪽 영역에 들어가도록 맞추고 가운데 정렬
+    const top = 56, right = 300 + 24, pad = 40;
+    const cw = framesEl.offsetWidth, ch = 12 + 14 + 896; // 표기 + 화면 높이(피그마 896) 기준
+    const padTop = parseFloat(getComputedStyle(framesEl).paddingTop), padLeft = parseFloat(getComputedStyle(framesEl).paddingLeft);
+    const availW = canvasEl.clientWidth - right - pad * 2, availH = canvasEl.clientHeight - top - pad * 2;
+    zoom = Math.min(4, Math.max(.1, Math.min(availW / (cw - padLeft * 2), availH / ch)));
+    panX = pad + (availW - (cw - padLeft * 2) * zoom) / 2 - padLeft * zoom;
+    panY = top + pad - padTop * zoom;
+    applyView();
+  }
+  // 처음 열 때: 현재 배율 그대로 데스크탑+모바일 묶음을 캔버스 정중앙에 배치
+  let viewTouched = false;
+  function centerView(){
+    const cs = getComputedStyle(framesEl);
+    const padTop = parseFloat(cs.paddingTop), padLeft = parseFloat(cs.paddingLeft);
+    const w = framesEl.offsetWidth - padLeft * 2, h = framesEl.offsetHeight - padTop - parseFloat(cs.paddingBottom);
+    panX = (canvasEl.clientWidth - w * zoom) / 2 - padLeft * zoom;
+    // 화면보다 길면 위쪽이 잘리지 않게 툴바 아래부터 시작, 짧으면 세로도 가운데
+    panY = h * zoom + padTop * 2 <= canvasEl.clientHeight ? (canvasEl.clientHeight - h * zoom) / 2 - padTop * zoom : 0;
+    applyView();
+  }
+  requestAnimationFrame(centerView);
+  window.addEventListener('load', () => { if (!viewTouched) centerView(); });
+  window.addEventListener('resize', () => { if (!viewTouched) centerView(); });
+  canvasEl.closest('.app').addEventListener('wheel', e => {
+    if (e.target.closest('.ps-dim,.pagemenu,.zmenu,.mirror-pop,.credit-card,.preview')) return;
+    e.preventDefault();
+    const r = canvasEl.getBoundingClientRect();
+    if (e.ctrlKey || e.metaKey) {
+      // 트랙패드 핀치는 작은 값, 마우스 휠은 큰 값 → 한 번에 너무 튀지 않게 제한
+      const d = Math.max(-50, Math.min(50, e.deltaY));
+      zoomAt(zoom * Math.exp(-d * 0.01), e.clientX - r.left, e.clientY - r.top);
+    } else {
+      const dx = e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX, dy = e.shiftKey && !e.deltaX ? 0 : e.deltaY;
+      panX -= dx; panY -= dy; viewTouched = true; applyView();
+    }
+  }, { passive: false });
+  // 드래그로 이동
+  let pan = null, spaceDown = false, panMoved = false;
+  canvasEl.addEventListener('pointerdown', e => {
+    if (e.target.closest('.fb-btn')) return; // 프레임 머리 버튼(C안)은 캔버스 이동 대신 클릭
+    const onEmpty = !e.target.closest('.frame .view');
+    panMoved = false;
+    if (!(e.button === 1 || (e.button === 0 && (spaceDown || onEmpty)))) return;
+    e.preventDefault();
+    pan = { x: e.clientX, y: e.clientY, px: panX, py: panY, id: e.pointerId };
+    try { canvasEl.setPointerCapture(e.pointerId); } catch (_) {} canvasEl.classList.add('panning');
+  });
+  canvasEl.addEventListener('pointermove', e => {
+    if (pan) { if (Math.abs(e.clientX - pan.x) + Math.abs(e.clientY - pan.y) > 3) panMoved = true; viewTouched = true; panX = pan.px + e.clientX - pan.x; panY = pan.py + e.clientY - pan.y; applyView(); return; }
+    canvasEl.classList.toggle('can-pan', !e.target.closest('.frame .view'));
+  });
+  const endPan = () => { if (!pan) return; pan = null; canvasEl.classList.remove('panning'); };
+  canvasEl.addEventListener('pointerup', endPan);
+  canvasEl.addEventListener('pointercancel', endPan);
+  const typing = el => el && el.closest && el.closest('input,textarea,[contenteditable]');
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && !typing(e.target)) { if (!spaceDown) { spaceDown = true; canvasEl.classList.add('space'); } e.preventDefault(); }
+    // ⇧0 = 100%
+    if (e.shiftKey && e.code === 'Digit0' && !typing(e.target)) setZoom(1);
+  });
+  document.addEventListener('keyup', e => { if (e.code === 'Space') { spaceDown = false; canvasEl.classList.remove('space'); } });
+  window.addEventListener('blur', () => { spaceDown = false; canvasEl.classList.remove('space'); endPan(); });
+  document.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('input,textarea')) return;
+    if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) { e.preventDefault(); setZoom(STEPS.find(s => s > zoom + .001) ?? zoom); }
+    if ((e.metaKey || e.ctrlKey) && e.key === '-') { e.preventDefault(); setZoom([...STEPS].reverse().find(s => s < zoom - .001) ?? zoom); }
+    if (e.shiftKey && e.key === '!') fit();
+  });
+
+  document.getElementById('vSeg').onclick = e => {
+    const b = e.target.closest('button'); if(!b) return;
+    app.dataset.v = b.dataset.v;
+    [...e.currentTarget.children].forEach(x => x.classList.toggle('on', x === b));
+    sync();
+  };
+  /* ---------- 저장 상태 ---------- */
+  const IC = {
+    saving: '<span class="spin"></span>',
+    saved:  '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    idle:   '<svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .6-7.96A6 6 0 0 0 6.1 9.1 4.5 4.5 0 0 0 7 18z"/><path d="M9.5 13.2l1.8 1.8 3.4-3.6"/></svg>',
+  };
+  IC.cloud = '<svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .6-7.96A6 6 0 0 0 6.1 9.1 4.5 4.5 0 0 0 7 18z"/></svg>';
+  const TX = { saving:'저장중...', saved:'저장됨', idle:'저장됨' };
+  let saveTimers = [];
+  function setSave(st){
+    document.querySelectorAll('.save.live').forEach(el => {
+      el.dataset.state = st;
+      // iconmode는 대기 상태에서도 아이콘을 남기고, 아니면 통째로 접힘 (초기 시안용)
+      let ic = st === 'idle' && el.classList.contains('iconmode') ? IC.idle : (st === 'idle' ? IC.saved : IC[st]);
+      if (el.classList.contains('cloudmode')) ic = `<span class="cc"><img src="assets/${st === 'saving' ? 'cloud' : 'cloud-check'}.svg" width="17.7" height="12.2313" alt=""></span>`;
+      // B·C안(cloudmode): 문구 없이 아이콘만. 상태는 스크린리더용 라벨로만 전달
+      const cloud = el.classList.contains('cloudmode');
+      // 구름 아이콘 호버 툴팁 (Figma 3583:18834)
+      const tip = st === 'saving' ? '변경사항 저장 중' : '변경사항이 모두 저장됨';
+      el.innerHTML = `<span class="ic">${ic}</span><span class="tx">${TX[st]}</span>` + (cloud ? `<span class="save-tip" role="tooltip">${tip}</span>` : '');
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-label', TX[st]);
+      el.title = cloud ? '' : (st === 'idle' ? '모든 변경사항이 저장됐어요' : '');
+    });
+  }
+  function simulateEdit(){
+    saveTimers.forEach(clearTimeout);
+    setSave('saving');
+    saveTimers = [setTimeout(() => setSave('saved'), 900), setTimeout(() => setSave('idle'), 900 + 2500)];
+  }
+  document.getElementById('sim').onclick = simulateEdit;
+  document.querySelectorAll('.tb-B .ib[data-tip="실행 취소"], .tb-C .ib[data-tip="실행 취소"]').forEach(b => b.addEventListener('click', simulateEdit));
+  setSave('saved'); saveTimers = [setTimeout(() => setSave('idle'), 2500)];
+
+  document.getElementById('aSeg').onclick = e => {
+    const b = e.target.closest('button'); if(!b) return;
+    app.dataset.applied = b.dataset.a;
+    [...e.currentTarget.children].forEach(x => x.classList.toggle('on', x === b));
+  };
+  sync();
+  /* ---------- 캔버스 선택: 섹션 먼저 → 그 안의 텍스트 ----------
+     · 첫 클릭: 섹션 선택 (데스크탑·모바일의 같은 섹션이 함께 표시) → 섹션 패널
+     · 선택된 섹션 안의 텍스트 클릭: 텍스트 선택 → 텍스트 패널
+     · 텍스트 더블클릭: 바로 글자 수정 → 편집 패널
+     · Esc: 텍스트 → 섹션 → 선택 해제 순으로 한 단계씩 */
+  const TXT_SEL = '.site :is(h2,h3,h4,.s-title p,.s-loop p,.s-intro p,.s-story p,.s-name,.s-price,.s-head a,.s-brand,.s-tabs span,.s-total,.s-sort span,.s-cols b,.s-cols span,.s-policy b,.s-legal span,.s-copy,.s-acc span)';
+  document.querySelectorAll(TXT_SEL).forEach(el => el.dataset.txt = '');
+  document.querySelectorAll('.site > :not(.s-status)').forEach(el => el.dataset.sec = el.classList[0]);
+  const selLayer = document.createElement('div'); selLayer.className = 'sel-layer';
+  selLayer.innerHTML = '<div class="sel-box hover"></div><div class="sel-box picked"></div><div class="sel-box sec"></div><div class="sel-box sec"></div><div class="sel-box picked pair"></div>';
+  canvasEl.appendChild(selLayer);
+  const [hoverBox, pickBox, secBoxA, secBoxB, pairBox] = selLayer.children;
+  let hoverEl = null, pickedEl = null, selSec = null, editingEl = null;
+  // 헤더는 섹션 단위로만 선택 (안의 텍스트는 선택·수정 불가)
+  const HEAD_SEC = 's-head';
+  const txtIn = (e) => { const t = e.target.closest('[data-txt]'); return t && !t.closest(`[data-sec="${HEAD_SEC}"]`) && !t.closest(OBJ_SEL) && !t.closest(LIST_BARS) ? t : null; };
+  // 이미지·상품 같은 요소 단위 선택 (요소 안의 글자보다 요소 자체가 먼저)
+  const OBJ_SEL = '.site [data-layer="image"], .site [data-layer="product"], .site [data-layer="productList"]';
+  // Shop 상품 영역: 탭바·정렬바까지 상품 목록(productList)과 한 덩어리로 선택
+  const LIST_BARS = '.site .s-list .s-tabbar, .site .s-list .s-sortbar';
+  const objIn = (e) => {
+    const o = e.target.closest(OBJ_SEL); if (o) return o;
+    const bar = e.target.closest(LIST_BARS);
+    return bar ? bar.closest('[data-sec]').querySelector('[data-layer="productList"]') : null;
+  };
+  // 상품 영역 상자: 탭바 맨 위 ~ 상품 그리드 맨 아래
+  function objRect(el){
+    const r = el.getBoundingClientRect();
+    if (el.dataset.layer !== 'productList') return r;
+    const top = el.closest('[data-sec]').querySelector('.s-tabbar');
+    if (!top) return r;
+    const t = top.getBoundingClientRect(), L = Math.min(r.left, t.left), T = Math.min(r.top, t.top);
+    return { left: L, top: T, width: Math.max(r.right, t.right) - L, height: Math.max(r.bottom, t.bottom) - T };
+  }
+  const isObj = el => !!el && el.dataset.layer !== undefined && el.dataset.txt === undefined;
+  // 글자가 실제로 차지하는 영역(줄 전체 너비가 아니라 글자 길이)
+  function textRect(el){
+    const r = document.createRange(); r.selectNodeContents(el);
+    const rects = [...r.getClientRects()].filter(x => x.width > 0 && x.height > 0);
+    if (!rects.length) return el.getBoundingClientRect();
+    const L = Math.min(...rects.map(x => x.left)), T = Math.min(...rects.map(x => x.top)),
+          R = Math.max(...rects.map(x => x.right)), B = Math.max(...rects.map(x => x.bottom));
+    return { left: L, top: T, width: R - L, height: B - T };
+  }
+  // 텍스트는 글자 바깥 2px, 섹션은 섹션 가장자리 안쪽에 맞춤
+  function boxTo(box, el){
+    if (!el || !el.offsetParent) { box.style.display = 'none'; return; }
+    const c = canvasEl.getBoundingClientRect(), isSec = el.dataset.sec !== undefined || isObj(el);
+    const r = isSec ? objRect(el) : textRect(el), pad = isSec ? 0 : 2;
+    Object.assign(box.style, { display: 'block', left: (r.left - c.left - pad) + 'px', top: (r.top - c.top - pad) + 'px', width: (r.width + pad * 2) + 'px', height: (r.height + pad * 2) + 'px' });
+  }
+  const visibleSecs = key => [...document.querySelectorAll(`.site [data-sec="${key}"]`)].filter(x => x.offsetParent);
+  // 데스크탑↔모바일 짝 찾기: 같은 페이지·같은 섹션에서
+  //  텍스트는 같은 태그·같은 글자 → 없으면 같은 순번, 이미지·상품은 같은 레이어의 같은 순번
+  function pairOf(el){
+    if (!el) return null;
+    const sec = el.closest('[data-sec]'), site = el.closest('.site'); if (!sec || !site) return null;
+    const other = [...document.querySelectorAll(`.site[data-key="${site.dataset.key}"] [data-sec="${sec.dataset.sec}"]`)].find(x => x !== sec);
+    if (!other) return null;
+    if (isObj(el)) {
+      const sel = `[data-layer="${el.dataset.layer}"]`;
+      return other.querySelectorAll(sel)[[...sec.querySelectorAll(sel)].indexOf(el)] || null;
+    }
+    const mine = [...sec.querySelectorAll('[data-txt]')], theirs = [...other.querySelectorAll('[data-txt]')];
+    const txt = el.textContent.trim();
+    return theirs.find(t => t.tagName === el.tagName && t.textContent.trim() === txt)
+        || theirs.find(t => t.textContent.trim() === txt)
+        || theirs[mine.indexOf(el)] || null;
+  }
+  function placeSelBoxes(){
+    // 하위 요소(텍스트·이미지·상품)를 선택하면 섹션 테두리는 숨김
+    const secs = selSec && !pickedEl ? visibleSecs(selSec) : [];
+    boxTo(secBoxA, secs[0]); boxTo(secBoxB, secs[1]);
+    const hoverIsSelSec = hoverEl && hoverEl.dataset.sec === selSec;
+    boxTo(hoverBox, hoverEl !== pickedEl && !hoverIsSelSec ? hoverEl : null);
+    boxTo(pickBox, pickedEl);
+    boxTo(pairBox, pairOf(pickedEl)); // 다른 뷰(데스크탑↔모바일)의 같은 요소도 함께 표시
+  }
+  function syncPanelMode(){
+    if (!selSec || pickedEl) app.classList.remove('bg-open', 'lay-open', 'col-open', 'ani-open', 'obj-open');
+    if (selSec && typeof updateBgPreview === 'function') updateBgPreview();
+    app.classList.toggle('has-sec', !!selSec && !pickedEl);
+    app.classList.toggle('has-sel', !!pickedEl && !isObj(pickedEl));
+    app.classList.toggle('has-obj', isObj(pickedEl));
+    if (isObj(pickedEl)) { app.dataset.obj = pickedEl.dataset.layer; if (typeof fillObjPanel === 'function') fillObjPanel(pickedEl); }
+    else delete app.dataset.obj;
+    app.classList.toggle('is-head', selSec === HEAD_SEC);
+  }
+  const STYLE_NAME = { H2: '제목 1', H3: '제목 2', H4: '제목 3' };
+  const toHex = c => '#' + (c.match(/\d+/g) || [0,0,0]).slice(0, 3).map(n => (+n).toString(16).padStart(2, '0')).join('').toUpperCase();
+  const WEIGHT = { 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'SemiBold', 700: 'Bold' };
+  function fillPanel(el){
+    document.getElementById('tpStyle').textContent = STYLE_NAME[el.tagName] || '본문';
+    const cs = getComputedStyle(el), hex = toHex(cs.color);
+    ['tpChip', 'tpChip2'].forEach(id => document.getElementById(id).style.background = cs.color);
+    ['tpColor', 'tpColor2'].forEach(id => document.getElementById(id).textContent = hex);
+    document.getElementById('tpWeight').textContent = WEIGHT[cs.fontWeight] || cs.fontWeight;
+    document.getElementById('tpLink').value = el.dataset.link || '';
+  }
+  function selectSection(key){
+    if (editingEl) stopEdit();
+    if (key !== selSec) app.classList.remove('bg-open', 'lay-open', 'col-open', 'ani-open', 'obj-open');
+    selSec = key; pickedEl = null;
+    syncPanelMode(); placeSelBoxes();
+  }
+  function pickText(el){
+    if (editingEl && editingEl !== el) stopEdit();
+    pickedEl = el;
+    if (el) { selSec = el.closest('[data-sec]').dataset.sec; if (!isObj(el)) fillPanel(el); }
+    syncPanelMode(); placeSelBoxes();
+  }
+  function clearSelection(){ if (editingEl) stopEdit(); selSec = null; pickedEl = null; hoverEl = null; syncPanelMode(); placeSelBoxes(); }
+  // 더블클릭: 커서를 띄우고 글자 수정
+  function startEdit(el, x, y){
+    pickText(el);
+    editingEl = el; app.classList.add('editing');
+    el.contentEditable = 'true'; el.spellcheck = false;
+    el.focus();
+    const range = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
+    const sel = getSelection(); sel.removeAllRanges();
+    if (range && el.contains(range.startContainer)) sel.addRange(range);
+    else { const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); sel.addRange(r); }
+    hoverEl = null; placeSelBoxes();
+  }
+  function stopEdit(){
+    if (!editingEl) return;
+    editingEl.removeAttribute('contenteditable');
+    editingEl = null; app.classList.remove('editing');
+    getSelection().removeAllRanges();
+    layoutSites(); placeSelBoxes();
+  }
+  canvasEl.addEventListener('dblclick', e => {
+    const t = txtIn(e);
+    if (!t || spaceDown) return;
+    e.preventDefault();
+    startEdit(t, e.clientX, e.clientY);
+  });
+  canvasEl.addEventListener('input', () => { layoutSites(); placeSelBoxes(); });
+  // 글자를 입력하면(캔버스 텍스트 수정, 패널 입력칸) 저장 상태 표시: 저장 중 → 저장됨 (실제 저장은 없음)
+  /* ---------- 미리보기: 현재 페이지(데스크탑)를 편집 표시 없이 창 너비로 ---------- */
+  const preview = document.getElementById('preview'), pvFit = document.getElementById('pvFit');
+  function fitPreview(){
+    const site = pvFit.firstElementChild; if (!site) return;
+    const k = pvFit.clientWidth / +site.dataset.w;
+    site.style.transform = `scale(${k})`;
+    pvFit.style.height = site.offsetHeight * k + 'px';
+  }
+  // 새 창(탭)으로 열기: 배너 + 현재 페이지 데스크탑 화면 (스타일·폰트는 이 문서 것을 그대로 복사)
+  function openPreview(){
+    const src = document.querySelector(`.frame.desk .site[data-key="${app.dataset.page}"]`); if (!src) return;
+    const site = src.cloneNode(true);
+    site.removeAttribute('style');
+    site.querySelectorAll('[contenteditable]').forEach(x => x.removeAttribute('contenteditable'));
+    site.querySelectorAll('[data-sec],[data-txt]').forEach(x => { x.removeAttribute('data-sec'); x.removeAttribute('data-txt'); });
+    closeMenus(); clearSelection();
+    const w = window.open('', '_blank'); if (!w) return;
+    const head = [...document.querySelectorAll('head link[rel="stylesheet"], head style')].map(n => n.outerHTML).join('');
+    const banner = document.querySelector('#preview .pv-banner').outerHTML;
+    const page = document.querySelector(`.pm-item[data-key="${app.dataset.page}"] .pl`);
+    w.document.open();
+    w.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base href="${location.href}"><title>미리보기${page ? ' - ' + page.textContent : ''}</title>${head}
+<style>html,body{height:100%}body{display:block;background:#fff;margin:0}.preview{position:fixed}</style></head>
+<body><div class="preview">${banner}<div class="pv-screen"><div class="pv-fit">${site.outerHTML}</div></div></div>
+<script>
+  const fit = document.querySelector('.pv-fit'), site = fit.firstElementChild;
+  function fitPreview(){ const k = fit.clientWidth / +site.dataset.w; site.style.transform = 'scale(' + k + ')'; fit.style.height = site.offsetHeight * k + 'px'; }
+  fitPreview(); addEventListener('resize', fitPreview); addEventListener('load', fitPreview);
+  document.fonts && document.fonts.ready.then(fitPreview);
+<\/script></body></html>`);
+    w.document.close();
+  }
+  function closePreview(){ preview.hidden = true; pvFit.replaceChildren(); }
+  document.querySelectorAll('.ib.pv, #framePreview').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); openPreview(); }));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !preview.hidden) { e.stopImmediatePropagation(); closePreview(); } }, true);
+  window.addEventListener('resize', () => { if (!preview.hidden) fitPreview(); });
+  document.addEventListener('input', e => { if (e.target.closest('.site, .panel')) simulateEdit(); });
+  canvasEl.addEventListener('keydown', e => {
+    if (!editingEl) return;
+    e.stopPropagation();
+    // Enter = 수정 끝 (Shift+Enter는 줄바꿈), Esc = 수정 끝
+    if ((e.key === 'Enter' && !e.shiftKey && !e.isComposing) || e.key === 'Escape') { e.preventDefault(); stopEdit(); }
+  });
+  document.getElementById('tpLink').addEventListener('input', e => { if (pickedEl) pickedEl.dataset.link = e.target.value; });
+  // 호버: 선택된 섹션 안에서는 텍스트, 그 밖에서는 섹션
+  canvasEl.addEventListener('pointerover', e => {
+    if (pan) return;
+    let t = null;
+    if (!editingEl) {
+      const sec = e.target.closest('.site [data-sec]'), txt = txtIn(e);
+      t = sec && sec.dataset.sec === selSec ? (objIn(e) || txt) : sec;
+    }
+    if (t !== hoverEl) { hoverEl = t; placeSelBoxes(); }
+  });
+  canvasEl.addEventListener('pointerleave', () => { hoverEl = null; placeSelBoxes(); });
+  canvasEl.addEventListener('click', e => {
+    if (spaceDown || panMoved) return;
+    const t = txtIn(e), sec = e.target.closest('.site [data-sec]');
+    if (editingEl && t === editingEl) return; // 편집 중 글자 안 클릭 = 커서 이동
+    if (!sec) { clearSelection(); return; }
+    const o = objIn(e);
+    if (sec.dataset.sec === selSec && o) pickText(o);        // 선택된 섹션 안 → 이미지·상품 영역
+    else if (sec.dataset.sec === selSec && t) pickText(t);   // 선택된 섹션 안 → 텍스트
+    else selectSection(sec.dataset.sec);                     // 그 밖 → 섹션부터
+    hoverEl = null; placeSelBoxes();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || editingEl || e.target.closest('input,textarea,[contenteditable]')) return;
+    if (pickedEl) selectSection(selSec); else if (selSec) clearSelection();
+  });
+  window.addEventListener('resize', placeSelBoxes);
+
+  /* ---------- 배경 패널: 섹션 패널의 '배경' → 열기, ← 뒤로 ---------- */
+  const bpanel = document.querySelector('.bpanel');
+  function secBgTarget(sec){ return sec.querySelector('.s-hero-media') || sec; }
+  function openBgPanel(){
+    const secs = visibleSecs(selSec); if (!secs.length) return;
+    const img = secs[0].querySelector('img:not(.sp-chev)');
+    const src = img ? img.getAttribute('src') : '';
+    document.getElementById('bpImg').src = src;
+    document.getElementById('bpFile').textContent = src ? src.split('/').pop() : '배경 이미지 없음';
+    setOverlay(+(secs[0].dataset.ovl || 0), false);
+    app.classList.add('bg-open');
+  }
+  function closeBgPanel(){ app.classList.remove('bg-open'); }
+  document.querySelector('.spanel .sp-item').addEventListener('click', openBgPanel);
+  document.getElementById('bpBack').addEventListener('click', closeBgPanel);
+  // 색상 패널: 기본은 Scheme만, Main 첫 번째 섹션(히어로)은 on-media까지 (선택 표시만, 캔버스 반영 없음)
+  const COLOR_MEDIA_SECS = new Set(['main:s-hero']);
+  document.querySelectorAll('.spanel .sp-item')[2].addEventListener('click', () => {
+    document.querySelector('.cpanel').classList.toggle('media', COLOR_MEDIA_SECS.has(app.dataset.page + ':' + selSec));
+    app.classList.add('col-open');
+  });
+  document.querySelectorAll('.spanel .sp-item')[3].addEventListener('click', () => app.classList.add('ani-open'));
+  document.getElementById('apBack').addEventListener('click', () => app.classList.remove('ani-open'));
+  // 구성 요소: 섹션 레이어 구조를 읽어서 목록 자동 생성
+  //  텍스트: textBlock 안 overline → 오버라인, title → 제목, description → 설명 (있으면 항목, 없으면 'OO 추가')
+  //  미디어: image 레이어 → 이미지 / 상품: product 레이어 → 상품
+  //  동작: button 레이어 → 버튼 (미디어·상품 묶음이 없는 섹션은 없을 때 '버튼 추가')
+  const TEXT_LAYERS = [['overline', '오버라인'], ['title', '제목'], ['description', '설명']];
+  function opItem(icon, label, add, target){
+    const b = document.createElement('button');
+    b.className = 'op-item' + (add ? ' op-add' : '');
+    b.innerHTML = `<img src="assets/${add ? 'comp-plus.svg' : icon}" width="18" height="18" alt=""><span>${label}${add ? ' 추가' : ''}</span>`;
+    if (target) b.addEventListener('click', () => pickText(target)); // 있는 요소는 누르면 바로 선택
+    return b;
+  }
+  function opGroup(title, items){
+    const g = document.createElement('div'); g.className = 'op-group';
+    g.innerHTML = `<p class="op-tab">${title}</p><div class="op-list"></div>`;
+    g.lastChild.append(...items); return g;
+  }
+  function buildObjPanel(){
+    const sec = visibleSecs(selSec)[0]; if (!sec) return;
+    const block = sec.querySelector('[data-layer="textBlock"]');
+    const groups = [opGroup('텍스트', TEXT_LAYERS.map(([layer, label]) => {
+      const el = block && block.querySelector(`[data-layer="${layer}"]`);
+      return opItem('comp-typography.svg', label, !el, el);
+    }))];
+    const imgs = [...sec.querySelectorAll('[data-layer="image"]')], prods = [...sec.querySelectorAll('[data-layer="product"]')];
+    if (imgs.length) groups.push(opGroup('미디어', imgs.map(el => opItem('comp-image.svg', '이미지', false, el))));
+    if (prods.length) groups.push(opGroup('상품', [opItem('comp-product.svg', '상품', false, prods[0])]));
+    const btns = [...sec.querySelectorAll('[data-layer="button"]')];
+    if (btns.length) groups.push(opGroup('동작', btns.map(el => opItem('comp-link.svg', '버튼', false, el))));
+    else if (!imgs.length && !prods.length) groups.push(opGroup('동작', [opItem('', '버튼', true)]));
+    document.getElementById('opGroups').replaceChildren(...groups);
+  }
+  document.querySelectorAll('.spanel .sp-item')[4].addEventListener('click', () => { buildObjPanel(); app.classList.add('obj-open'); });
+  document.getElementById('opBack').addEventListener('click', () => app.classList.remove('obj-open'));
+  /* ---------- 요소 선택 패널 채우기 ---------- */
+  function fillObjPanel(el){
+    const type = el.dataset.layer;
+    if (type === 'image') {
+      const img = el.querySelector('img'), src = img ? img.getAttribute('src') : '';
+      document.getElementById('mpImg').src = src;
+      document.getElementById('mpFile').textContent = src ? src.split('/').pop() : 'fileName.png';
+      setMediaOvl(+(el.dataset.ovl || 0), false);
+    } else if (type === 'product') {
+      // 섹션에 진열된 상품 카드 목록 (데스크탑 기준)
+      const cards = [...el.closest('[data-sec]').querySelectorAll('[data-layer="product"]')];
+      document.getElementById('ppList').replaceChildren(...cards.map(c => {
+        const r = document.createElement('div'); r.className = 'pp-row';
+        r.innerHTML = `<img src="${c.querySelector('img').getAttribute('src')}" alt=""><span></span>`;
+        r.lastChild.textContent = c.querySelector('.s-name').textContent; return r;
+      }));
+    }
+  }
+  // 미디어 오버레이: 선택한 이미지(데스크탑·모바일 같은 위치)에 검정 막
+  const mpSlider = document.getElementById('mpSlider');
+  function mediaTargets(){
+    if (!pickedEl || pickedEl.dataset.layer !== 'image') return [];
+    const key = pickedEl.closest('[data-sec]').dataset.sec, idx = [...pickedEl.closest('[data-sec]').querySelectorAll('[data-layer="image"]')].indexOf(pickedEl);
+    return [...document.querySelectorAll(`.site[data-key="${pickedEl.closest('.site').dataset.key}"] [data-sec="${key}"]`)].map(s => s.querySelectorAll('[data-layer="image"]')[idx]).filter(Boolean);
+  }
+  function setMediaOvl(v, apply = true){
+    v = Math.round(Math.min(100, Math.max(0, v)));
+    document.getElementById('mpOvlVal').textContent = v;
+    document.getElementById('mpFill').style.width = v + '%';
+    document.getElementById('mpKnob').style.left = v + '%';
+    if (apply) mediaTargets().forEach(t => { t.dataset.ovl = v; t.style.setProperty('--ovl', v / 100); });
+  }
+  let mpSliding = false;
+  const mpSlideTo = e => { const r = mpSlider.getBoundingClientRect(); setMediaOvl((e.clientX - r.left) / r.width * 100); };
+  mpSlider.addEventListener('pointerdown', e => { mpSliding = true; try { mpSlider.setPointerCapture(e.pointerId); } catch (_) {} mpSlideTo(e); });
+  mpSlider.addEventListener('pointermove', e => { if (mpSliding) mpSlideTo(e); });
+  mpSlider.addEventListener('pointerup', () => { mpSliding = false; });
+  document.querySelector('.mp-seg').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    [...e.currentTarget.children].forEach(x => x.classList.toggle('on', x === b));
+  });
+  // 카테고리: 체크 해제하면 캔버스 탭에서 숨김, 전체보기 on이면 맨 앞에 'All' 탭 추가
+  document.getElementById('pcList').addEventListener('change', e => {
+    const cat = e.target.dataset.cat;
+    document.querySelectorAll('.site.shop .s-tabs span:not(.s-all)').forEach(t => { if (t.textContent.trim() === cat) t.hidden = !e.target.checked; });
+    layoutSites(); placeSelBoxes();
+  });
+  const pcSwitch = document.getElementById('pcSwitch');
+  pcSwitch.addEventListener('click', () => {
+    const on = pcSwitch.getAttribute('aria-checked') !== 'true';
+    pcSwitch.setAttribute('aria-checked', on);
+    pcSwitch.firstChild.src = on ? 'assets/switch-on.svg' : 'assets/switch-off.svg';
+    document.querySelector('.gpanel').classList.toggle('all-on', on);
+    document.querySelectorAll('.site.shop .s-tabs').forEach(tabs => {
+      let a = tabs.querySelector('.s-all');
+      if (on && !a) { a = document.createElement('span'); a.className = 's-all'; a.dataset.txt = ''; tabs.prepend(a); }
+      if (a) { a.hidden = !on; a.textContent = document.getElementById('pcAllText').value || 'All'; }
+    });
+    layoutSites(); placeSelBoxes();
+  });
+  document.getElementById('pcAllText').addEventListener('input', e => {
+    document.querySelectorAll('.site.shop .s-tabs .s-all').forEach(a => a.textContent = e.target.value || 'All');
+  });
+  document.getElementById('cpBack').addEventListener('click', () => app.classList.remove('col-open'));
+  document.querySelectorAll('.cpanel .cp-group').forEach(g => g.addEventListener('click', e => {
+    const b = e.target.closest('.cp-opt'); if (!b) return;
+    [...g.children].forEach(x => x.classList.toggle('on', x === b));
+  }));
+  // 레이아웃 패널: Main 첫 번째 섹션(히어로)에서만 열림, 탭 전환 외 동작 없음
+  // Main 두 번째 섹션(Best Sellers): 비율 칩 없음, 데스크탑 선택지 2개, 모바일 1개
+  const LAYOUT_SECS = new Set(['main:s-hero', 'main:s-best']);
+  document.querySelectorAll('.spanel .sp-item')[1].addEventListener('click', () => {
+    const k = app.dataset.page + ':' + selSec;
+    if (!LAYOUT_SECS.has(k)) return;
+    document.querySelector('.lpanel').classList.toggle('compact', k === 'main:s-best');
+    app.classList.add('lay-open');
+  });
+  document.getElementById('lpBack').addEventListener('click', () => app.classList.remove('lay-open'));
+  document.getElementById('lpTabs').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    [...e.currentTarget.children].forEach(x => x.classList.toggle('on', x === b));
+    document.querySelector('.lpanel').dataset.tab = b.dataset.t;
+  });
+  document.getElementById('bpSeg').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    [...e.currentTarget.children].forEach(x => x.classList.toggle('on', x === b));
+  });
+  // 오버레이 슬라이더: 0~100%, 선택한 섹션(데스크탑·모바일)에 바로 반영
+  const slider = document.getElementById('bpSlider');
+  function setOverlay(v, apply = true){
+    v = Math.round(Math.min(100, Math.max(0, v)));
+    document.getElementById('bpOvlVal').textContent = v;
+    document.getElementById('bpFill').style.width = v + '%';
+    document.getElementById('bpKnob').style.left = v + '%';
+    if (!apply || !selSec) return;
+    visibleSecs(selSec).concat([...document.querySelectorAll(`.site [data-sec="${selSec}"]`)]).forEach(sec => {
+      sec.dataset.ovl = v;
+      const t = secBgTarget(sec);
+      if (getComputedStyle(t).position === 'static') t.style.position = 'relative';
+      let o = t.querySelector(':scope > .s-ovl');
+      if (!o) { o = document.createElement('i'); o.className = 's-ovl'; t.prepend(o); [...t.children].forEach(c => { if (c === o || (c.tagName === 'IMG' && getComputedStyle(c).position === 'absolute')) return; if (getComputedStyle(c).position === 'static') c.style.position = 'relative'; c.style.zIndex = 2; }); }
+      o.style.opacity = v / 100;
+    });
+    updateBgPreview();
+  }
+  // 섹션 패널 '배경' 항목 아이콘 자리에 현재 섹션 배경(이미지 + 오버레이) 미리보기
+  // 배경 메뉴가 아예 없는 섹션 (페이지:섹션) — Main 두 번째 섹션(헤더 제외), Shop 첫 번째 섹션(헤더 제외)
+  const NO_BG = new Set(['main:s-best', 'shop:s-list', 'about:s-intro', 'about:s-story', 'about:s-foot']); // About 섹션은 모두 배경 메뉴 없음
+  function updateBgPreview(){
+    document.getElementById('spBgItem').hidden = NO_BG.has(app.dataset.page + ':' + selSec);
+    const ic = document.getElementById('spBgIc'), secs = selSec ? visibleSecs(selSec) : [];
+    const img = secs.length ? secs[0].querySelector('img') : null;
+    ic.classList.toggle('has-prev', !!img);
+    if (!img) return;
+    document.getElementById('spBgPrev').src = img.getAttribute('src');
+    document.getElementById('spBgOvl').style.opacity = (+(secs[0].dataset.ovl || 0)) / 100;
+  }
+  let sliding = false;
+  const slideTo = e => { const r = slider.getBoundingClientRect(); setOverlay((e.clientX - r.left) / r.width * 100); };
+  slider.addEventListener('pointerdown', e => { sliding = true; slider.setPointerCapture(e.pointerId); slideTo(e); });
+  slider.addEventListener('pointermove', e => { if (sliding) slideTo(e); });
+  slider.addEventListener('pointerup', () => { sliding = false; });
+</script>
+</body>
+</html>
