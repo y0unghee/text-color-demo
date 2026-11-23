@@ -333,6 +333,9 @@
   .app[data-v="C"] .frame{background:rgba(255,255,255,.3);border:1px solid rgba(51,62,76,.16);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:12px;align-self:flex-start}
   .app[data-v="C"] .frame .bar{margin-bottom:0}
   .app[data-v="C"] .mirror-box :is(.pv,#mirrorBtn,.div){display:none}
+  /* C안: 업데이트 버튼을 감싸던 흰 박스를 없애고, 버튼을 박스 높이(36px)만큼 키움 */
+  .app[data-v="C"] .tb-B .mirror-box{background:none;box-shadow:none;padding:0}
+  .app[data-v="C"] .tb-B .mirror-box .cta{height:36px;border-radius:8px;box-shadow:0 4px 10px rgba(65,78,97,.08)}
   /* 미러링 연결 중 스피너 (Figma Library 4691:17668): 미러링 아이콘 자리에서 3초 회전 */
   .m-spin{display:none;flex:none;border-radius:50%;background:conic-gradient(from 90deg,rgba(0,0,0,0),rgba(0,0,0,.9));-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 15.5%),#000 calc(100% - 15.5% + .5px));mask:radial-gradient(farthest-side,transparent calc(100% - 15.5%),#000 calc(100% - 15.5% + .5px));animation:mspin .8s linear infinite}
   #mirrorBtn .m-spin{width:20px;height:20px}
