@@ -550,6 +550,9 @@
   .msite .s-head a:nth-child(2){justify-content:flex-end}
   .msite .s-hero{height:844px;padding:16px}
   .msite .s-hero-media{border-radius:6px;padding:40px 20px}
+  /* 레이아웃 선택지 반영: bl 왼쪽 아래(기본) · bc 가운데 아래 · mc 정중앙 · ml 왼쪽 가운데 */
+  .site .s-hero-media[data-pos^="m"]{justify-content:center}
+  .site .s-hero-media[data-pos$="c"] .s-tb{text-align:center}
   .msite .s-hero-media::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.2)}
   .msite .s-hero h2{font-size:40px;z-index:1}
   .msite .s-best{display:flex;flex-direction:column;gap:32px;padding:56px 16px}
@@ -708,6 +711,34 @@
   .lpanel.compact .lp-chips{display:none}
   .lpanel.compact .lp-desk .lp-opt:nth-child(n+3),.lpanel.compact .lp-mob .lp-opt:nth-child(n+2){display:none}
   .lp-mob .lp-prev{height:196px}
+  .lp-chip{cursor:pointer}
+  .lp-chip:not(.on):hover{background:#eceef1}
+  .lp-opt{cursor:pointer;text-align:left}
+  /* 첫 번째 섹션: 선택지 미리보기 (Figma 3645:67662 / 67663) — 실제 크기로 그려서 축소, 비율 칩에 따라 높이 변경 */
+  .lpanel:not(.compact) .lp-prev{height:auto;padding:1px;overflow:hidden}
+  .lp-mini{display:none;position:relative;overflow:hidden;width:calc(var(--nw) * var(--k) * 1px);height:calc(var(--nh) * var(--k) * 1px)}
+  .lpanel:not(.compact) .lp-mini{display:block}
+  .lp-native{position:absolute;left:0;top:0;width:calc(var(--nw) * 1px);height:calc(var(--nh) * 1px);transform:scale(var(--k));transform-origin:0 0;background:#fff;display:flex;padding:19px;box-sizing:border-box;font-family:"DM Sans",sans-serif}
+  .lp-media{position:relative;flex:1;display:flex;flex-direction:column;border-radius:8px;overflow:hidden;background:#ddd;padding:64px 36px}
+  .lp-media::before{content:"";position:absolute;inset:0;background:rgba(0,0,0,.2)}
+  .lp-cb{position:relative;flex:1;display:flex;flex-direction:column;gap:36px;justify-content:flex-end;align-items:flex-start}
+  .lp-tb{display:flex;flex-direction:column;gap:16px;width:100%}
+  .lp-tb i{font-style:normal;font-size:14px;line-height:1.6;color:rgba(255,255,255,.8)}
+  .lp-tb b{font-weight:500;font-size:52px;line-height:1.3;color:#fff}
+  .lp-tb em{font-style:normal;font-size:16px;line-height:1.5;color:rgba(255,255,255,.8)}
+  .lp-btns{display:flex;gap:8px}
+  .lp-btns span{padding:14px 27px;border-radius:4px;border:1px solid #fff;font-weight:500;font-size:13px;line-height:1.2;color:#fff}
+  .lp-btns span:first-child{background:#fff;color:#111}
+  .lp-native[data-pos$="c"] .lp-cb{align-items:center;text-align:center}
+  .lp-native[data-pos^="m"] .lp-cb{justify-content:center}
+  .lp-mob .lp-native{padding:8px}
+  .lp-mob .lp-media{border-radius:6px;padding:40px 20px}
+  .lp-mob .lp-cb{gap:28px}
+  .lp-mob .lp-tb{gap:12px}
+  .lp-mob .lp-tb i{font-size:13px}
+  .lp-mob .lp-tb b{font-size:40px}
+  .lp-mob .lp-tb em{font-size:15px}
+  .lp-mob .lp-btns span{padding:12px 20px}
   /* ---------- 색상 패널 (Figma 2655-506334 / 2655-508720) ---------- */
   .panel.cpanel{display:none;flex-direction:column;align-items:stretch;justify-content:flex-start;height:auto;width:280px;padding:0;color:#000;border-radius:12px;box-shadow:0 4px 10px rgba(65,78,97,.08)}
   .app[data-v="A"] .panel.cpanel{width:292px;border-radius:0}
@@ -1151,8 +1182,8 @@
   <div class="panel lpanel" aria-label="레이아웃" data-tab="desk">
     <div class="bp-head"><button class="bp-back" id="lpBack" aria-label="뒤로"><img src="assets/bg-back.svg" width="18" height="18" alt=""></button><h3>레이아웃</h3></div>
     <div class="lp-tabs" id="lpTabs"><button data-t="desk" class="on">데스크탑</button><button data-t="mob">모바일</button></div>
-    <div class="lp-pane lp-desk"><div class="lp-chips"><span class="lp-chip on">풀스크린</span><span class="lp-chip">2:1</span><span class="lp-chip">21:9</span><span class="lp-chip">3:1</span><span class="lp-chip">4:1</span></div><div class="lp-opts"><div class="lp-opt on"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div></div></div>
-    <div class="lp-pane lp-mob"><div class="lp-chips"><span class="lp-chip on">풀스크린</span><span class="lp-chip">9:16</span><span class="lp-chip">5:8</span><span class="lp-chip">4:5</span></div><div class="lp-opts"><div class="lp-opt on"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div></div></div>
+    <div class="lp-pane lp-desk" style="--nw:1920;--nh:1080;--k:.121875"><div class="lp-chips"><span class="lp-chip on" data-nh="1080">풀스크린</span><span class="lp-chip" data-nh="960">2:1</span><span class="lp-chip" data-nh="822.86">21:9</span><span class="lp-chip" data-nh="640">3:1</span><span class="lp-chip" data-nh="480">4:1</span></div><div class="lp-opts"><div class="lp-opt on"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div></div></div>
+    <div class="lp-pane lp-mob" style="--nw:390;--nh:844;--k:.276923"><div class="lp-chips"><span class="lp-chip on" data-nh="844">풀스크린</span><span class="lp-chip" data-nh="693.33">9:16</span><span class="lp-chip" data-nh="624">5:8</span><span class="lp-chip" data-nh="487.5">4:5</span></div><div class="lp-opts"><div class="lp-opt on"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div><div class="lp-opt"><div class="lp-prev"></div></div></div></div>
   </div>
 
   <!-- 색상 패널: 기본 = Scheme만 (Figma 2655-506334), Main 첫 번째 섹션 = Scheme + on-media (Figma 2655-508720) -->
@@ -2006,6 +2037,30 @@
     app.classList.add('lay-open');
   });
   document.getElementById('lpBack').addEventListener('click', () => app.classList.remove('lay-open'));
+  // 선택지 미리보기: 데스크탑 = 왼쪽 아래·가운데 아래·정중앙·왼쪽 가운데, 모바일 = 왼쪽 아래·가운데 아래·정중앙
+  const LP_POS = { desk: ['bl', 'bc', 'mc', 'ml'], mob: ['bl', 'bc', 'mc'] };
+  const lpMini = pos => `<div class="lp-mini"><div class="lp-native" data-pos="${pos}"><div class="lp-media"><div class="lp-cb"><div class="lp-tb"><i>Lorem ipsum</i><b>Lorem ipsum dolor sit amet</b><em>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Graecis praetorem, consuetudinum, maiores, tribus saluti reprehensa.</em></div><div class="lp-btns"><span>Button Label</span><span>Button Label</span></div></div></div></div></div>`;
+  ['desk', 'mob'].forEach(t => document.querySelectorAll(`.lp-${t} .lp-prev`).forEach((p, i) => p.innerHTML = lpMini(LP_POS[t][i])));
+  // 비율 칩: 고르면 그 탭의 미리보기 높이(비율)가 바뀜
+  document.querySelectorAll('.lpanel .lp-chips').forEach(g => g.addEventListener('click', e => {
+    const c = e.target.closest('.lp-chip'); if (!c) return;
+    [...g.children].forEach(x => x.classList.toggle('on', x === c));
+    g.closest('.lp-pane').style.setProperty('--nh', c.dataset.nh); // 칩은 미리보기 비율만 바꿈 (캔버스 반영은 선택지를 눌렀을 때)
+  }));
+  // 레이아웃 선택지 고르기
+  document.querySelectorAll('.lpanel .lp-opts').forEach(g => g.addEventListener('click', e => {
+    const o = e.target.closest('.lp-opt'); if (!o) return;
+    [...g.children].forEach(x => x.classList.toggle('on', x === o));
+    // 첫 번째 섹션(히어로): 선택지를 누르면 '지금 고른 비율 칩 + 이 선택지의 글 위치'를 캔버스에 반영
+    //  (데스크탑 탭 → 데스크탑, 모바일 탭 → 모바일 / 높이는 데스크탑 1920·모바일 390 너비 기준)
+    if (document.querySelector('.lpanel').classList.contains('compact')) return;
+    const pane = g.closest('.lp-pane'), t = pane.classList.contains('lp-desk') ? 'desk' : 'mob';
+    const hero = document.querySelector(`.frame.${t} .site[data-key="main"] .s-hero`);
+    if (!hero) return;
+    hero.querySelector('.s-hero-media').dataset.pos = LP_POS[t][[...g.children].indexOf(o)];
+    hero.style.height = pane.querySelector('.lp-chip.on').dataset.nh + 'px';
+    layoutSites(); placeSelBoxes(); simulateEdit();
+  }));
   document.getElementById('lpTabs').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     [...e.currentTarget.children].forEach(x => x.classList.toggle('on', x === b));
