@@ -323,6 +323,9 @@
   .tb-B .cta{height:30px;border-radius:6px}
   .tb-B .side:last-child{gap:8px}
   .app:is([data-v="B"],[data-v="C"]) .panel{top:68px;right:12px;width:280px}
+  /* B·C안(떠 있는 패널): 화면 아래 16px 남기고 최대 높이 제한, 넘치면 패널 안에서 스크롤 */
+  .app:is([data-v="B"],[data-v="C"]) .panel{max-height:calc(100% - 68px - 16px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+  .app:is([data-v="B"],[data-v="C"]) .panel > *{flex-shrink:0}
   /* ---------- C안 (Figma 3612:507493): B안 + 미리보기·미러링을 캔버스 프레임 머리로 ---------- */
   .fb-btn{display:none;position:relative;width:24px;height:24px;border-radius:4px;background:none;align-items:center;justify-content:center;flex:none}
   .fb-btn:hover{background:#2E97FF}
@@ -1867,6 +1870,13 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !preview.hidden) { e.stopImmediatePropagation(); closePreview(); } }, true);
   window.addEventListener('resize', () => { if (!preview.hidden) fitPreview(); });
   document.addEventListener('input', e => { if (e.target.closest('.site, .panel')) simulateEdit(); });
+  // 패널이 바뀌거나 다시 열리면 패널 안 스크롤을 맨 위로
+  let panelKey = '';
+  new MutationObserver(() => {
+    const k = app.className + '|' + (app.dataset.obj || '');
+    if (k === panelKey) return; panelKey = k;
+    document.querySelectorAll('.panel').forEach(p => p.scrollTop = 0);
+  }).observe(app, { attributes: true, attributeFilter: ['class', 'data-obj'] });
   canvasEl.addEventListener('keydown', e => {
     if (!editingEl) return;
     e.stopPropagation();
